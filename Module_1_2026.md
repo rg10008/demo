@@ -89,12 +89,12 @@ ip -c -br a
 **Должен быть такой вывод у команды:**
 ```bash
 lo               UNKNOWN        127.0.0.1/8 ::1/128 
-enp7s1           UP             192.168.120.157/24 fe80::be24:11ff:fe74:fa7/64 
+ens33           UP             192.168.120.157/24 fe80::be24:11ff:fe74:fa7/64 
 enp7s2           UP             172.16.1.1/28 fe80::be24:11ff:fed1:a8dc/64 
 enp7s3           UP             172.16.2.1/28 fe80::be24:11ff:fed6:e399/64
 ```
 > [!NOTE] 
-> ⚠️ 💡 Примечание: Для enp7s1 вывод будет отличаться из-за того что у всех этот интерфейс зависит от их собственной локальной сети, так как это интерфейс через который идет выход в интернет с помощью Bridge из Proxmox в VMware, в VMware обязательно нужно было указать Bridge в типе сетевого подключения, тип NAT или создание отдельной Network внутри VMware может вызывать нестабильность в работе!
+> ⚠️ 💡 Примечание: Для ens33 вывод будет отличаться из-за того что у всех этот интерфейс зависит от их собственной локальной сети, так как это интерфейс через который идет выход в интернет с помощью Bridge из Proxmox в VMware, в VMware обязательно нужно было указать Bridge в типе сетевого подключения, тип NAT или создание отдельной Network внутри VMware может вызывать нестабильность в работе!
 
 ### HQ-RTR
 ```bash
@@ -104,20 +104,20 @@ mkdir /etc/net/ifaces/enp7s2.200
 mkdir /etc/net/ifaces/enp7s2.999
 ```
 ```bash
-vim /etc/net/ifaces/enp7s1/options
+vim /etc/net/ifaces/ens33/options
 BOOTPROTO=static
 TYPE=eth
 ```
 ```bash
-vim /etc/net/ifaces/enp7s1/ipv4address
+vim /etc/net/ifaces/ens33/ipv4address
 172.16.1.2/28
 ```
 ```bash
-vim /etc/net/ifaces/enp7s1/ipv4route
+vim /etc/net/ifaces/ens33/ipv4route
 default via 172.16.1.1
 ```
 ```bash
-vim /etc/net/ifaces/enp7s1/resolv.conf
+vim /etc/net/ifaces/ens33/resolv.conf
 nameserver 9.9.9.9
 ```
 ```bash
@@ -167,7 +167,7 @@ ip -c -br a
 **Должен быть такой вывод у команды:**
 ```bash
 lo               UNKNOWN        127.0.0.1/8 ::1/128 
-enp7s1           UP             172.16.1.2/28 fe80::be24:11ff:feda:daba/64 
+ens33           UP             172.16.1.2/28 fe80::be24:11ff:feda:daba/64 
 enp7s2           UP             fe80::be24:11ff:feae:ad50/64 
 enp7s2.100@enp7s2 UP             192.168.100.1/27 fe80::be24:11ff:feae:ad50/64 
 enp7s2.200@enp7s2 UP             192.168.200.65/28 fe80::be24:11ff:feae:ad50/64 
@@ -177,9 +177,9 @@ enp7s2.999@enp7s2 UP             192.168.99.89/29 fe80::be24:11ff:feae:ad50/64
 > ⚠️ 💡 Важно!: Так как VLAN созданы через network внутри Proxmox, обязательно идем в веб панель Proxmox VE, заходим в раздел Server View > Datacenter > pve. В этом разделе в открытом списке выбираем 10103, 10104 машины (HQ-SRV,HQ-CLI), заходим в настройки во вкладку Hardware, меняем в графе Network Device (net6) VLAN tag, с того который там указан (если не указан, то включаем VLAN tag, и прописываем -> 100 для HQ-CLI, и 200 для HQ-SRV.) Перезапускать машины не нужно.
 
 ### HQ-SRV
-⚠️ 💡 Для enp7s1 (/etc/net/ifaces/enp7s1/options) в HQ-RTR, нужно заменить:
+⚠️ 💡 Для ens33 (/etc/net/ifaces/ens33/options) в HQ-RTR, нужно заменить:
 ```bash
-vim /etc/net/ifaces/enp7s1/options 
+vim /etc/net/ifaces/ens33/options 
 BOOTPROTO=dhcp
 TYPE=eth
 CONFIG_WIRELESS=no
@@ -195,15 +195,15 @@ BOOTPROTO=static
 TYPE=eth
 ```
 ```bash
-vim /etc/net/ifaces/enp7s1/ipv4address
+vim /etc/net/ifaces/ens33/ipv4address
 192.168.100.2/27
 ```
 ```bash
-vim /etc/net/ifaces/enp7s1/ipv4route
+vim /etc/net/ifaces/ens33/ipv4route
 default via 192.168.100.1
 ```
 ```bash
-vim /etc/net/ifaces/enp7s1/resolv.conf
+vim /etc/net/ifaces/ens33/resolv.conf
 nameserver 9.9.9.9
 ```
 ```bash
@@ -215,7 +215,7 @@ ip -c -br a
 **Должен быть такой вывод у команды:**
 ```bash
 lo               UNKNOWN        127.0.0.1/8 ::1/128 
-enp7s1           UP             192.168.100.2/27 fe80::be24:11ff:fef0:121/64 
+ens33           UP             192.168.100.2/27 fe80::be24:11ff:fef0:121/64 
 ```
 
 ### BR-RTR
@@ -232,21 +232,21 @@ vim /etc/net/ifaces/enp7s2/ipv4address
 192.168.3.1/28
 ```
 ```bash
-vim /etc/net/ifaces/enp7s1/options
+vim /etc/net/ifaces/ens33/options
 BOOTPROTO=static
 TYPE=eth
 ```
 ```bash
-vim /etc/net/ifaces/enp7s1/ipv4address
+vim /etc/net/ifaces/ens33/ipv4address
 172.16.2.2/28
 ```
 ```bash
-vim /etc/net/ifaces/enp7s1/ipv4route
+vim /etc/net/ifaces/ens33/ipv4route
 default via 172.16.2.1
 ```
 ```bash
-vim /etc/net/ifaces/enp7s1/resolv.conf
-nameserver 9.9.9.9
+vim /etc/net/ifaces/ens33/resolv.conf
+nameserver 8.8.8.8 
 ```
 ```bash
 systemctl restart network
@@ -257,14 +257,14 @@ ip -c -br a
 **Должен быть такой вывод у команды:**
 ```bash
 lo               UNKNOWN        127.0.0.1/8 ::1/128 
-enp7s1           UP             172.16.2.2/28 fe80::be24:11ff:fe33:b6b2/64 
+ens33           UP             172.16.2.2/28 fe80::be24:11ff:fe33:b6b2/64 
 enp7s2           UP             192.168.3.1/28 fe80::be24:11ff:fea1:62b4/64
 ```
 
 ### BR-SRV
-⚠️ 💡 Для enp7s1 (/etc/net/ifaces/enp7s1/options) в HQ-RTR, нужно заменить:
+⚠️ 💡 Для ens33 (/etc/net/ifaces/ens33/options) в HQ-RTR, нужно заменить:
 ```bash
-vim /etc/net/ifaces/enp7s1/options 
+vim /etc/net/ifaces/ens33/options 
 BOOTPROTO=dhcp
 TYPE=eth
 CONFIG_WIRELESS=no
@@ -280,15 +280,15 @@ BOOTPROTO=static
 TYPE=eth
 ```
 ```bash
-vim /etc/net/ifaces/enp7s1/ipv4address
+vim /etc/net/ifaces/ens33/ipv4address
 192.168.3.2/28
 ```
 ```bash
-vim /etc/net/ifaces/enp7s1/ipv4route
+vim /etc/net/ifaces/ens33/ipv4route
 default via 192.168.3.1
 ```
 ```bash
-vim /etc/net/ifaces/enp7s1/resolv.conf
+vim /etc/net/ifaces/ens33/resolv.conf
 nameserver 9.9.9.9
 ```
 ```bash
@@ -300,7 +300,7 @@ ip -c -br a
 **Должен быть такой вывод у команды:**
 ```bash
 lo               UNKNOWN        127.0.0.1/8 ::1/128 
-enp7s1           UP             192.168.3.2/28 fe80::be24:11ff:fed0:f63a/64 
+ens33           UP             192.168.3.2/28 fe80::be24:11ff:fed0:f63a/64 
 ```
 > [!TIP]
 > ⚠️ 💡 Примечание!: HQ-CLI будет настроен позднее так как там будет использоваться DHCP настройка, на данном этапе теперь требуется настроить проброс портов чтобы пинг начал ходить между устройствами и появился доступ в интернет со всех машин, так же все отчеты будут приведны в отдельном [файле](./report_2026.odt), сейчас заполнять ничего не требуется, несмотря на задание.
@@ -368,38 +368,37 @@ Chain OUTPUT (policy ACCEPT 0 packets, 0 bytes)
 
 Chain POSTROUTING (policy ACCEPT 0 packets, 0 bytes)
  pkts bytes target     prot opt in     out     source               destination         
-    0     0 MASQUERADE  all  --  *      enp7s1  172.16.1.0/28        0.0.0.0/0           
-    0     0 MASQUERADE  all  --  *      enp7s1  172.16.2.0/28        0.0.0.0/0 
+    0     0 MASQUERADE  all  --  *      ens33  172.16.1.0/28        0.0.0.0/0           
+    0     0 MASQUERADE  all  --  *      ens33  172.16.2.0/28        0.0.0.0/0 
 ```
 > [!TIP]
 > ⚠️ 💡 **Примечание!**: Сразу же настроим интернет на всех устройствах, для этого потребуется повтороить настройку на всех устройствах, детали приведены ниже.
 
 ### HQ-RTR
-```bash
+
 vim /etc/net/sysctl.conf
 net.ipv4.ip_forward = 1
 
 sysctl -p
 systemctl restart network
-```
-```bash
+
 apt-get update && apt-get install iptables -y
 
-iptables -t nat -A POSTROUTING -o enp7s1 -s 192.168.100.0/27 -j MASQUERADE
-iptables -t nat -A POSTROUTING -o enp7s1 -s 192.168.200.64/28 -j MASQUERADE
-iptables -t nat -A POSTROUTING -o enp7s1 -s 192.168.99.88/29 -j MASQUERADE
+iptables -t nat -A POSTROUTING -o ens33 -s 192.168.100.0/27 -j MASQUERADE
+iptables -t nat -A POSTROUTING -o ens33 -s 192.168.200.64/28 -j MASQUERADE
+iptables -t nat -A POSTROUTING -o ens33 -s 192.168.99.88/29 -j MASQUERADE
 
-iptables -A FORWARD -i ens19.10 -o enp7s1 -s 192.168.100.0/27 -j ACCEPT
-iptables -A FORWARD -i ens19.20 -o enp7s1 -s 192.168.200.64/28 -j ACCEPT
-iptables -A FORWARD -i ens19.99 -o enp7s1 -s 192.168.99.88/29 -j ACCEPT
+iptables -A FORWARD -i ens34.10 -o ens33 -s 192.168.100.0/27 -j ACCEPT
+iptables -A FORWARD -i ens34.20 -o ens33 -s 192.168.200.64/28 -j ACCEPT
+iptables -A FORWARD -i ens34.99 -o ens33 -s 192.168.99.88/29 -j ACCEPT
 
 iptables-save > /etc/sysconfig/iptables
 systemctl enable iptables --now
 systemctl restart iptables
-```
-```bash
+
 systemctl status iptables
 iptables -t nat -L -n -v
+
 ```
 Должны быть такие выводы у команд:
 ```bash
@@ -426,33 +425,31 @@ Chain OUTPUT (policy ACCEPT 0 packets, 0 bytes)
 
 Chain POSTROUTING (policy ACCEPT 0 packets, 0 bytes)
  pkts bytes target     prot opt in     out     source               destination         
-    0     0 MASQUERADE  all  --  *      enp7s1  192.168.100.0/27     0.0.0.0/0           
-    0     0 MASQUERADE  all  --  *      enp7s1  192.168.200.64/28    0.0.0.0/0           
-    0     0 MASQUERADE  all  --  *      enp7s1  192.168.99.88/29     0.0.0.0/0
+    0     0 MASQUERADE  all  --  *      ens33  192.168.100.0/27     0.0.0.0/0           
+    0     0 MASQUERADE  all  --  *      ens33  192.168.200.64/28    0.0.0.0/0           
+    0     0 MASQUERADE  all  --  *      ens33  192.168.99.88/29     0.0.0.0/0
 ```
-### BR-RTR
-```bash
+### BQR
 vim /etc/net/sysctl.conf
 net.ipv4.ip_forward = 1
 
 sysctl -p
 systemctl restart network
-```
-```bash
+
+
 apt-get update && apt-get install iptables -y
 
-iptables -t nat -A POSTROUTING -o enp7s1 -s 192.168.3.0/28 -j MASQUERADE
-iptables -A FORWARD -i ens19 -o enp7s1 -s 192.168.3.0/28 -j ACCEPT
+iptables -t nat -A POSTROUTING -o ens33 -s 192.168.3.0/28 -j MASQUERADE
+iptables -A FORWARD -i ens34 -o ens33  -s 192.168.3.0/28 -j ACCEPT
 
 iptables-save > /etc/sysconfig/iptables
 
 systemctl enable iptables --now
 systemctl restart iptables
-```
-```bash
+
 systemctl status iptables
 iptables -t nat -L -n -v
-```
+
 Должны быть такие выводы у команд:
 ```bash
 ● iptables.service - IPv4 firewall with iptables
@@ -478,7 +475,7 @@ Chain OUTPUT (policy ACCEPT 0 packets, 0 bytes)
 
 Chain POSTROUTING (policy ACCEPT 0 packets, 0 bytes)
  pkts bytes target     prot opt in     out     source               destination         
-    0     0 MASQUERADE  all  --  *      enp7s1  192.168.3.0/28       0.0.0.0/0 
+    0     0 MASQUERADE  all  --  *      ens33  192.168.3.0/28       0.0.0.0/0 
 ```
 > [!IMPORTANT] 
 >⚠️ **Важно**: На данном этапе уже должен работать выход в Интернет на всех устройствах (кроме HQ-CLI, его настроим позже по DHCP), а также пинг между ними. Если что-то не работает, значит где-то ошибка.
@@ -701,7 +698,7 @@ ip -c -br a
 Если все сделано верно получаем следующий вывод:
 ```bash
 lo               UNKNOWN        127.0.0.1/8 ::1/128 
-enp7s1           UP             172.16.1.2/28 fe80::be24:11ff:feda:daba/64 
+ens33           UP             172.16.1.2/28 fe80::be24:11ff:feda:daba/64 
 enp7s2           UP             fe80::be24:11ff:feae:ad50/64 
 enp7s2.100@enp7s2 UP             192.168.100.1/27 fe80::be24:11ff:feae:ad50/64 
 enp7s2.200@enp7s2 UP             192.168.200.65/28 fe80::be24:11ff:feae:ad50/64 
@@ -735,7 +732,7 @@ ip -c -br a
 Если все сделано верно получаем следующий вывод:
 ```bash
 lo               UNKNOWN        127.0.0.1/8 ::1/128 
-enp7s1           UP             172.16.2.2/28 fe80::be24:11ff:fe33:b6b2/64 
+ens33           UP             172.16.2.2/28 fe80::be24:11ff:fe33:b6b2/64 
 enp7s2           UP             192.168.3.1/28 fe80::be24:11ff:fea1:62b4/64 
 gre0@NONE        DOWN           
 gretap0@NONE     DOWN           
@@ -978,11 +975,11 @@ dhcpcd
 ```bash
 dhcpcd-9.4.0 starting
 DUID 00:04:a4:4f:22:43:ad:81:49:e1:b2:c7:06:fb:19:ec:1c:6a
-enp7s1: soliciting a DHCP lease
-enp7s1: offered 192.168.200.66 from 192.168.200.65
-enp7s1: leased 192.168.200.66 for 600 seconds
-enp7s1: adding route to 192.168.200.64/28
-enp7s1: adding default route via 192.168.200.65
+ens33: soliciting a DHCP lease
+ens33: offered 192.168.200.66 from 192.168.200.65
+ens33: leased 192.168.200.66 for 600 seconds
+ens33: adding route to 192.168.200.64/28
+ens33: adding default route via 192.168.200.65
 forked to background, child pid 2593
 ```
 ```bash
@@ -991,7 +988,7 @@ ip -c -br a
 **Вывод:**
 ```bash
 lo               UNKNOWN        127.0.0.1/8 ::1/128 
-enp7s1           UP             192.168.200.66/28 fe80::be24:11ff:fec6:63e9/64 
+ens33           UP             192.168.200.66/28 fe80::be24:11ff:fec6:63e9/64 
 ```
 
 ### HQ-RTR
@@ -1139,7 +1136,7 @@ $TTL 86400
 ```
 
 ```bash
-rm -rf /etc/net/ifaces/enp7s1/resolv.conf 
+rm -rf /etc/net/ifaces/ens33/resolv.conf 
 systemctl restart network
 ```
 ```bash
@@ -1195,7 +1192,7 @@ Dec 10 10:34:09 hq-srv.au-team.irpo named[16792]: resolver priming query complet
 
 ### HQ-RTR
 ```bash
-vim /etc/net/ifaces/enp7s1/resolv.conf
+vim /etc/net/ifaces/ens33/resolv.conf
 nameserver 192.168.100.2 # Старую запись удаляем, оставляем только новую.
 ```
 ```bash
@@ -1204,7 +1201,7 @@ systemctl restart dhcpd
 ```
 ### BR-RTR
 ```bash
-vim /etc/net/ifaces/enp7s1/resolv.conf
+vim /etc/net/ifaces/ens33/resolv.conf
 nameserver 192.168.100.2 # Старую запись удаляем, оставляем только новую.
 ```
 ```bash
@@ -1212,7 +1209,7 @@ systemctl restart network
 ```
 ### BR-SRV
 ```bash
-vim /etc/net/ifaces/enp7s1/resolv.conf
+vim /etc/net/ifaces/ens33/resolv.conf
 nameserver 192.168.100.2 # Старую запись удаляем, оставляем только новую.
 ```
 ```bash
