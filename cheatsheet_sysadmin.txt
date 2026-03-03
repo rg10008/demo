@@ -25,7 +25,6 @@ git clone https://github.com/rg10008/demo
 
 Проверка:
     hostname
-    cat /etc/hostname
 
 --------------------------------------------------------------------------------
 2. НАСТРОЙКА IP-АДРЕСАЦИИ (AltLinux - etcnet)

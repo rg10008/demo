@@ -38,7 +38,6 @@ hostnamectl set-hostname hq-cli.au-team.irpo
 [ПРОВЕРКА]
 hostname              # покажет короткое имя
 hostname -f           # покажет полное доменное имя (FQDN)
-cat /etc/hostname     # файл с именем хоста
 
 --------------------------------------------------------------------------------
 2. НАСТРОЙКА IP-АДРЕСАЦИИ (AltLinux - etcnet)
