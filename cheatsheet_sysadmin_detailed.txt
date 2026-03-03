@@ -1,0 +1,1358 @@
+================================================================================
+                    ШПARGALKA - СЕТЕВОЕ И СИСТЕМНОЕ АДМИНИСТРИРОВАНИЕ
+                              09.02.06 (Demo Exam 2025)
+                           Версия для AltLinux (замена EcoRouter)
+================================================================================
+
+================================================================================
+                           МОДУЛЬ 1: НАСТРОЙКА СЕТЕВОЙ ИНФРАСТРУКТУРЫ
+================================================================================
+
+--------------------------------------------------------------------------------
+1. НАСТРОЙКА ИМЕНИ ХОСТА (AltLinux)
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+Имя хоста (hostname) используется для идентификации устройства в сети.
+Полное доменное имя (FQDN - Fully Qualified Domain Name) включает имя хоста
+и домен, например: hq-srv.au-team.irpo
+
+Компоненты FQDN:
+- hq-srv - имя хоста (сервер в офисе HQ)
+- au-team.irpo - доменное имя
+
+[КОМАНДЫ]
+hostnamectl set-hostname <hostname>.<domain-name>
+exec bash
+
+[ПРИМЕР]
+hostnamectl set-hostname hq-srv.au-team.irpo
+hostnamectl set-hostname br-srv.au-team.irpo
+hostnamectl set-hostname hq-cli.au-team.irpo
+
+[ПОЯСНЕНИЕ КОМАНД]
+- hostnamectl - утилита systemd для управления именем хоста
+- set-hostname - аргумент для изменения имени
+- exec bash - перезапуск оболочки для применения изменений без выхода
+
+[ПРОВЕРКА]
+hostname              # покажет короткое имя
+hostname -f           # покажет полное доменное имя (FQDN)
+cat /etc/hostname     # файл с именем хоста
+
+--------------------------------------------------------------------------------
+2. НАСТРОЙКА IP-АДРЕСАЦИИ (AltLinux - etcnet)
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+В AltLinux используется система etcnet для настройки сети. Конфигурация
+хранится в директории /etc/net/ifaces/<интерфейс>/ в виде отдельных файлов.
+
+Основные файлы:
+- options - основные параметры интерфейса
+- ipv4address - IP-адрес и маска
+- ipv4route - маршруты (шлюз по умолчанию)
+- resolv.conf - DNS настройки
+
+[ПРОСМОТР ИНТЕРФЕЙСОВ]
+ip a                  # показать все интерфейсы и их адреса
+ip link show          # показать только список интерфейсов
+
+[ФАЙЛ: /etc/net/ifaces/eth0/options]
+TYPE=eth              # тип интерфейса (ethernet)
+BOOTPROTO=static      # статическая адресация (не DHCP)
+DISABLED=no           # интерфейс включен
+NM_CONTROLLED=no      # не управляется NetworkManager
+SYSTEMD_CONTROLLED=no # не управляется systemd-networkd
+
+Важно: NM_CONTROLLED и SYSTEMD_CONTROLLED должны быть no, чтобы etcnet
+мог управлять интерфейсом через файлы ipv4address и ipv4route.
+
+[ФАЙЛ: /etc/net/ifaces/eth0/ipv4address]
+192.168.100.1/26
+
+Формат: <IP-адрес>/<префикс маски>
+- /26 = маска 255.255.255.192 (64 адреса, 62 usable)
+- /27 = маска 255.255.255.224 (32 адреса, 30 usable)
+- /28 = маска 255.255.255.240 (16 адресов, 14 usable)
+- /29 = маска 255.255.255.248 (8 адресов, 6 usable)
+
+[ФАЙЛ: /etc/net/ifaces/eth0/ipv4route]
+default via 192.168.100.62
+
+Формат: default via <IP-шлюза>
+Шлюз - это маршрутизатор, через который трафик идет в другие сети.
+
+[ФАЙЛ: /etc/net/ifaces/eth0/resolv.conf]
+search au-team.irpo            # домен поиска (дописывается к коротким именам)
+nameserver 192.168.100.1       # IP-адрес DNS-сервера
+
+[ПРИМЕНЕНИЕ]
+systemctl restart network       # перезапуск сетевой службы
+
+[ПРОВЕРКА]
+ip a                            # проверить IP-адрес
+ip r                            # проверить маршруты (шлюз)
+cat /etc/resolv.conf            # проверить DNS
+
+[РАСЧЕТ СЕТЕЙ ПО ЗАДАНИЮ]
+┌─────────────────┬────────────┬────────────────────┬────────┐
+│ Сеть            │ VLAN       │ Диапазон            │ Адресов│
+├─────────────────┼────────────┼────────────────────┼────────┤
+│ HQ-SRV сеть     │ VLAN 100   │ 192.168.100.0/26    │ 64     │
+│ HQ-CLI сеть     │ VLAN 200   │ 192.168.200.0/28    │ 16     │
+│ BR-SRV сеть     │ -          │ 192.168.0.0/27      │ 32     │
+│ Управление      │ VLAN 999   │ 192.168.99.0/29     │ 8      │
+│ ISP-HQ линк     │ -          │ 172.16.4.0/28       │ 16     │
+│ ISP-BR линк     │ -          │ 172.16.5.0/28       │ 16     │
+└─────────────────┴────────────┴────────────────────┴────────┘
+
+RFC1918 (приватные диапазоны):
+- 10.0.0.0/8 (10.0.0.0 - 10.255.255.255)
+- 172.16.0.0/12 (172.16.0.0 - 172.31.255.255)
+- 192.168.0.0/16 (192.168.0.0 - 192.168.255.255)
+
+--------------------------------------------------------------------------------
+3. DHCP КЛИЕНТ
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+DHCP (Dynamic Host Configuration Protocol) автоматически назначает
+IP-адрес, маску, шлюз и DNS-сервер. Используется когда адрес получается
+динамически от провайдера или DHCP-сервера.
+
+[ФАЙЛ: /etc/net/ifaces/eth0/options]
+TYPE=eth
+BOOTPROTO=dhcp      # получать адрес по DHCP
+
+[ПРИМЕНЕНИЕ]
+systemctl restart network
+
+[ЧТО ПРОИСХОДИТ]
+1. Интерфейс отправляет DHCP Discover (broadcast)
+2. DHCP-сервер отвечает DHCP Offer
+3. Клиент отправляет DHCP Request
+4. Сервер подтверждает DHCP ACK с параметрами:
+   - IP-адрес
+   - Маска подсети
+   - Шлюз по умолчанию
+   - DNS-серверы
+   - Доменное имя
+
+[ПРОВЕРКА]
+ip a                    # полученный IP
+ip r                    # полученный шлюз
+cat /etc/resolv.conf    # полученные DNS
+
+--------------------------------------------------------------------------------
+4. СОЗДАНИЕ ПОЛЬЗОВАТЕЛЕЙ (AltLinux)
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+По заданию нужно создать пользователя sshuser на серверах с:
+- UID 1010 (идентификатор пользователя)
+- Пароль P@ssw0rd
+- Право запускать sudo без пароля
+
+[СОЗДАНИЕ ПОЛЬЗОВАТЕЛЯ SSHUSER]
+useradd -u 1010 sshuser          # создать с UID 1010
+echo 'sshuser:P@ssw0rd' | chpasswd   # установить пароль
+
+[ПОЯСНЕНИЕ КОМАНД]
+- useradd - создать пользователя
+- -u 1010 - задать конкретный UID
+- chpasswd - изменить пароль (читает из stdin формат user:password)
+
+[НАСТРОЙКА SUDO БЕЗ ПАРОЛЯ]
+echo 'sshuser ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
+
+Или через visudo (безопаснее - проверяет синтаксис):
+visudo
+# Добавить строку:
+sshuser ALL=(ALL) NOPASSWD: ALL
+
+[РАСШИФРОВКА СТРОКИ SUDOERS]
+sshuser              # пользователь
+ALL=                 # на всех хостах
+(ALL)                # может запускать от любого пользователя
+NOPASSWD:            # без запроса пароля
+ALL                  # все команды
+
+[СОЗДАНИЕ ПОЛЬЗОВАТЕЛЯ NET_ADMIN ДЛЯ МАРШРУТИЗАТОРОВ]
+useradd -m net_admin
+echo 'net_admin:P@$$word' | chpasswd
+echo 'net_admin ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
+
+[ПРОВЕРКА]
+id sshuser                        # информация о пользователе
+su - sshuser                      # переключиться на пользователя
+sudo whoami                       # проверить sudo (должно вывести root)
+
+--------------------------------------------------------------------------------
+5. SSH - БЕЗОПАСНЫЙ УДАЛЕННЫЙ ДОСТУП
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+SSH (Secure Shell) - протокол для безопасного удаленного управления.
+По заданию нужно:
+- Использовать порт 2024 (нестандартный)
+- Разрешить только пользователя sshuser
+- Ограничить попытки входа до 2
+- Настроить баннер "Authorized access only"
+
+[ФАЙЛ: /etc/openssh/sshd_config]
+Port 2024                    # порт для подключений (стандартный 22)
+AllowUsers sshuser           # разрешены подключения только этому юзеру
+MaxAuthTries 2               # максимум 2 попытки аутентификации
+PasswordAuthentication yes   # разрешить вход по паролю
+Banner /etc/openssh/banner   # показывать баннер перед входом
+
+[ПОЯСНЕНИЕ ПАРАМЕТРОВ]
+- Port - смена порта усложняет автоматический перебор
+- AllowUsers - ограничивает кто может подключаться
+- MaxAuthTries - защита от брутфорса
+- Banner - юридическое уведомление о санкциях за несанкционированный доступ
+
+[СОЗДАНИЕ БАННЕРА]
+echo 'Authorized access only' > /etc/openssh/banner
+
+[ПРИМЕНЕНИЕ]
+systemctl restart sshd
+
+[ПРОВЕРКА]
+# Попытка подключения другим пользователем (должна быть отклонена):
+ssh -p 2024 root@192.168.100.1
+
+# Подключение sshuser:
+ssh -p 2024 sshuser@192.168.100.1
+
+[ПОЛЕЗНЫЕ КЛЮЧИ SSH]
+ssh -p 2024 user@host         # указать порт
+ssh -i key.pem user@host      # использовать ключ
+ssh -L 8080:localhost:80      # локальный проброс порта
+ssh -R 8080:localhost:80      # удаленный проброс порта
+
+--------------------------------------------------------------------------------
+6. VLAN (AltLinux + OpenVSwitch)
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+VLAN (Virtual Local Area Network) - технология разделения одной физической
+сети на несколько логических. Каждый VLAN имеет свой ID (1-4094).
+
+По заданию:
+- VLAN 100 - для HQ-SRV (серверы)
+- VLAN 200 - для HQ-CLI (клиенты)
+- VLAN 999 - для управления
+
+Трафик тегируется (добавляется заголовок 802.1Q с номером VLAN).
+
+[УСТАНОВКА OpenVSwitch]
+apt-get install openvswitch
+
+Open vSwitch - программный коммутатор для виртуальных сред.
+
+[ВАРИАНТ 1: ЧЕРЕЗ OpenVSwitch]
+# Создать мост (bridge):
+ovs-vsctl add-br ovs-br0
+
+# Добавить порт с тегом VLAN:
+ovs-vsctl add-port ovs-br0 eth0 tag=100   # VLAN 100
+ovs-vsctl add-port ovs-br0 eth1 tag=200   # VLAN 200
+
+# Проверить:
+ovs-vsctl show
+
+[ВАРИАНТ 2: ЧЕРЕЗ etcnet (Рекомендуется)]
+# Создать директорию для VLAN интерфейса:
+mkdir -p /etc/net/ifaces/vlan100
+
+# Файл: /etc/net/ifaces/vlan100/options
+TYPE=vlan                # тип - VLAN
+VLAN_PARENT=eth0         # родительский интерфейс
+VLAN_ID=100              # номер VLAN
+BOOTPROTO=static
+
+# Файл: /etc/net/ifaces/vlan100/ipv4address
+192.168.100.1/26
+
+# Аналогично для VLAN 200 и VLAN 999
+
+[ПРИМЕНЕНИЕ]
+systemctl restart network
+
+[ПРОВЕРКА]
+ip link show              # показать все интерфейсы
+ip a show vlan100         # конкретный VLAN интерфейс
+cat /proc/net/vlan/config # список VLAN
+
+--------------------------------------------------------------------------------
+7. GRE/IPinIP ТУННЕЛЬ (AltLinux)
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+Туннель инкапсулирует пакеты одной сети внутри пакетов другой сети.
+Используется для соединения удаленных офисов через публичную сеть.
+
+Типы туннелей:
+- GRE (Generic Routing Encapsulation) - туннелирует IP, IPX и др.
+- IPinIP - туннелирует только IP (проще, меньше overhead)
+
+По заданию: создать туннель между офисами HQ и BR.
+
+[ВРЕМЕННОЕ СОЗДАНИЕ ТУННЕЛЯ]
+# На HQ-RTR:
+ip tunnel add tun0 mode gre remote 172.16.5.14 local 172.16.4.14
+ip link set tun0 up
+ip addr add 10.0.0.1/30 dev tun0
+
+# На BR-RTR:
+ip tunnel add tun0 mode gre remote 172.16.4.14 local 172.16.5.14
+ip link set tun0 up
+ip addr add 10.0.0.2/30 dev tun0
+
+[ПОЯСНЕНИЕ ПАРАМЕТРОВ]
+- tun0 - имя туннельного интерфейса
+- mode gre - тип туннеля (можно ipip для IPinIP)
+- remote - IP-адрес удаленного конца туннеля
+- local - IP-адрес локального конца туннеля
+
+[ПОСТОЯННАЯ НАСТРОЙКА ЧЕРЕЗ etcnet]
+# Файл: /etc/net/ifaces/tun0/options
+TYPE=iptun               # тип - IP туннель
+TUNTYPE=gre              # GRE или ipip
+TUNLOCAL=172.16.4.14     # локальный IP
+TUNREMOTE=172.16.5.14    # удаленный IP
+
+# Файл: /etc/net/ifaces/tun0/ipv4address
+10.0.0.1/30              # адрес туннеля
+
+[АДРЕСАЦИЯ ТУННЕЛЯ]
+10.0.0.0/30 используется для туннеля:
+- 10.0.0.0 - сеть
+- 10.0.0.1 - HQ-RTR
+- 10.0.0.2 - BR-RTR
+- 10.0.0.3 - broadcast
+
+[ПРИМЕНЕНИЕ]
+systemctl restart network
+
+[ПРОВЕРКА]
+ip tunnel show            # список туннелей
+ip link show tun0         # статус интерфейса
+ping 10.0.0.2             # проверка связности через туннель
+
+--------------------------------------------------------------------------------
+8. OSPF - ДИНАМИЧЕСКАЯ МАРШРУТИЗАЦИЯ (FRR)
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+OSPF (Open Shortest Path First) - протокол динамической маршрутизации.
+Маршрутизаторы автоматически обмениваются информацией о сетях и
+строят таблицу маршрутизации.
+
+Преимущества:
+- Автоматическое обнаружение сетей
+- Быстрая сходимость при изменениях топологии
+- Поддержка аутентификации между маршрутизаторами
+
+По заданию:
+- Использовать link-state протокол (OSPF)
+- Включить только на интерфейсах туннеля
+- Настроить парольную защиту
+
+[УСТАНОВКА FRR (Free Range Routing)]
+apt-get install frr
+
+FRR - это современный набор протоколов маршрутизации (преемник Quagga).
+
+[ФАЙЛ: /etc/frr/daemons]
+ospfd=yes               # включить OSPF
+
+[НАСТРОЙКА ЧЕРЕЗ vtysh]
+vtysh                   # войти в CLI FRR
+
+configure terminal
+router ospf
+  network 10.0.0.0/30 area 0        # сеть туннеля
+  network 192.168.100.0/26 area 0   # сеть HQ-SRV
+  network 192.168.200.0/28 area 0   # сеть HQ-CLI
+  passive-interface default          # все интерфейсы пассивные по умолчанию
+  no passive-interface tun0          # кроме туннеля
+  area 0 authentication              # включить аутентификацию
+exit
+
+interface tun0
+  ip ospf authentication-key P@ssOSPF   # пароль для аутентификации
+exit
+
+write                   # сохранить конфигурацию
+exit
+
+[ПОЯСНЕНИЕ КОМАНД]
+- network - объявляет сеть для OSPF
+- area 0 - зона OSPF (backbone)
+- passive-interface - интерфейс не отправляет OSPF пакеты
+- no passive-interface - разрешить OSPF на интерфейсе
+- authentication - включить аутентификацию для безопасности
+
+[ЗАПУСК]
+systemctl enable --now frr
+
+[ПРОВЕРКА]
+vtysh -c "show ip ospf neighbor"    # показать соседей OSPF
+vtysh -c "show ip route ospf"       # маршруты OSPF
+ip route show | grep ospf           # маршруты в системе
+
+[ЧТО ДОЛЖНО БЫТЬ]
+После настройки маршрутизаторы должны:
+1. Установить соседские отношения (neighbor adjacency)
+2. Обменяться информацией о подключенных сетях
+3. Построить таблицу маршрутизации
+
+--------------------------------------------------------------------------------
+9. NAT - ДИНАМИЧЕСКАЯ ТРАНСЛЯЦИЯ АДРЕСОВ
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+NAT (Network Address Translation) преобразует приватные IP-адреса
+в публичные для доступа к Интернет. Без NAT устройства с приватными
+адресами не могут работать в Интернете.
+
+Типы NAT:
+- SNAT/MASQUERADE - для исходящего трафика (изнутри наружу)
+- DNAT - для входящего трафика (снаружи внутрь, проброс портов)
+
+[ВКЛЮЧЕНИЕ FORWARDING]
+echo 1 > /proc/sys/net/ipv4/ip_forward
+
+Для постоянной настройки в /etc/sysctl.conf:
+net.ipv4.ip_forward=1
+
+Применить: sysctl -p
+
+[НАСТРОЙКА MASQUERADE]
+iptables -t nat -A POSTROUTING -s 192.168.100.0/26 -o eth0 -j MASQUERADE
+iptables -t nat -A POSTROUTING -s 192.168.200.0/28 -o eth0 -j MASQUERADE
+
+[ПОЯСНЕНИЕ КОМАНДЫ]
+- -t nat - таблица NAT
+- -A POSTROUTING - добавить правило в цепочку POSTROUTING
+- -s 192.168.100.0/26 - источник (внутренняя сеть)
+- -o eth0 - исходящий интерфейс
+- -j MASQUERADE - действие (скрыть источник за IP интерфейса)
+
+MASQUERADE vs SNAT:
+- MASQUERADE - для динамических IP (пересчитывает при смене)
+- SNAT - для статических IP (быстрее)
+
+[СОХРАНЕНИЕ ПРАВИЛ]
+apt-get install iptables-services
+systemctl enable iptables
+iptables-save > /etc/sysconfig/iptables
+
+[ВОССТАНОВЛЕНИЕ ПРАВИЛ]
+iptables-restore < /etc/sysconfig/iptables
+
+[ПРОВЕРКА]
+iptables -t nat -L -n -v        # показать правила NAT
+ping 8.8.8.8                    # проверить доступ к Интернету
+
+--------------------------------------------------------------------------------
+10. ПРОБРОС ПОРТОВ (DNAT)
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+DNAT (Destination NAT) используется для публикации внутренних сервисов
+внешней сети. Внешний запрос на определенный порт перенаправляется
+на внутренний сервер.
+
+По заданию:
+- Порт 2024 -> HQ-SRV:2024 (SSH)
+- Порт 80 -> BR-SRV:8080 (MediaWiki)
+- Порт 2024 -> BR-SRV:2024 (SSH)
+
+[ПРИМЕРЫ ПРАВИЛ]
+# Проброс 2024 на HQ-SRV:
+iptables -t nat -A PREROUTING -p tcp -d 172.16.4.14 --dport 2024 \
+  -j DNAT --to-destination 192.168.100.1:2024
+
+# Проброс 80 на 8080 для MediaWiki:
+iptables -t nat -A PREROUTING -p tcp -d 172.16.5.14 --dport 80 \
+  -j DNAT --to-destination 192.168.0.2:8080
+
+# Проброс 2024 на BR-SRV:
+iptables -t nat -A PREROUTING -p tcp -d 172.16.5.14 --dport 2024 \
+  -j DNAT --to-destination 192.168.0.2:2024
+
+[ПОЯСНЕНИЕ ПАРАМЕТРОВ]
+- -A PREROUTING - добавить в цепочку PREROUTING (до маршрутизации)
+- -p tcp - протокол TCP
+- -d 172.16.4.14 - адрес назначения (внешний IP)
+- --dport 2024 - порт назначения (внешний порт)
+- --to-destination - куда перенаправить (внутренний IP:порт)
+
+[СОХРАНЕНИЕ]
+iptables-save > /etc/sysconfig/iptables
+
+[ПРОВЕРКА]
+iptables -t nat -L -n -v
+# Подключиться снаружи:
+ssh -p 2024 sshuser@172.16.4.14
+
+--------------------------------------------------------------------------------
+11. DHCP СЕРВЕР (AltLinux)
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+DHCP сервер автоматически назначает IP-адреса клиентам.
+По заданию HQ-RTR выдает настройки для HQ-CLI.
+
+Параметры DHCP:
+- IP-адрес из пула
+- Маска подсети
+- Шлюз по умолчанию
+- DNS-сервер
+- Доменное имя
+
+[УСТАНОВКА]
+apt-get install dhcp-server
+
+[ФАЙЛ: /etc/dhcp/dhcpd.conf]
+option domain-name "au-team.irpo";
+option domain-name-servers 192.168.100.1;
+default-lease-time 600;
+max-lease-time 7200;
+
+subnet 192.168.200.0 netmask 255.255.255.240 {
+    range 192.168.200.2 192.168.200.14;      # пул адресов
+    option routers 192.168.200.1;             # шлюз
+    option domain-name-servers 192.168.100.1; # DNS
+    option domain-name "au-team.irpo";        # домен
+}
+
+[ПОЯСНЕНИЕ ПАРАМЕТРОВ]
+- range - диапазон выдаваемых адресов
+- option routers - шлюз по умолчанию
+- option domain-name-servers - DNS-серверы
+- default-lease-time - время аренды по умолчанию (секунды)
+
+[УКАЗАНИЕ ИНТЕРФЕЙСА]
+Файл: /etc/sysconfig/dhcpd
+DHCPDARGS=eth1              # интерфейс в сторону клиентов
+
+[ЗАПУСК]
+systemctl enable --now dhcpd
+
+[ПРОВЕРКА]
+systemctl status dhcpd
+cat /var/lib/dhcp/dhcpd.leases    # выданные адреса
+
+[НА КЛИЕНТЕ (HQ-CLI)]
+# Настроить BOOTPROTO=dhcp
+# Перезапустить сеть:
+systemctl restart network
+
+# Проверить:
+ip a                    # полученный IP
+ip r                    # полученный шлюз
+
+--------------------------------------------------------------------------------
+12. DNS СЕРВЕР (BIND)
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+DNS (Domain Name System) преобразует имена в IP-адреса и обратно.
+BIND - наиболее распространенная реализация DNS-сервера.
+
+Типы DNS записей:
+- A - имя -> IPv4 адрес
+- AAAA - имя -> IPv6 адрес
+- PTR - IP адрес -> имя (обратная зона)
+- CNAME - псевдоним (алиас)
+- NS - авторитетный сервер зоны
+- MX - почтовый сервер
+- SOA - начальная запись зоны
+
+[УСТАНОВКА]
+apt-get update && apt-get install bind -y
+
+[ФАЙЛ: /var/lib/bind/etc/options.conf]
+listen-on { 192.168.100.1; 127.0.0.1; };   # на каких IP слушать
+listen-on-v6 { none; };                     # IPv6 отключен
+forwarders { 8.8.8.8; 8.8.4.4; };          # DNS пересылки
+allow-query { any; };                       # от кого принимать запросы
+recursion yes;                              # рекурсивные запросы
+
+[ПОЯСНЕНИЕ]
+- forwarders - если нет записи локально, спросить у этих серверов
+- recursion - разрешить рекурсивные запросы (для клиентов)
+
+[ДОБАВЛЕНИЕ ЗОН]
+Файл: /var/lib/bind/etc/rfc1912.conf
+
+zone "au-team.irpo" {
+    type master;
+    file "zone/au-team.irpo";
+};
+
+zone "100.168.192.in-addr.arpa" {
+    type master;
+    file "zone/100.168.192.in-addr.arpa";
+};
+
+[ФАЙЛ ПРЯМОЙ ЗОНЫ: /var/lib/bind/etc/zone/au-team.irpo]
+$TTL 86400                              # время кеширования
+@ IN SOA hq-srv.au-team.irpo. root.au-team.irpo. (
+    2025010101 ; Serial                 # серийный номер (увеличивать при изменениях)
+    3H         ; Refresh                # интервал обновления
+    15M        ; Retry                  # интервал повторных попыток
+    1W         ; Expire                 # срок годности данных
+    1D )       ; Minimum                # минимальное TTL
+
+@        IN NS      hq-srv.au-team.irpo.
+@        IN A       192.168.100.1
+hq-srv   IN A       192.168.100.1       # A запись
+hq-cli   IN A       192.168.200.2
+hq-rtr   IN A       172.16.4.14
+br-srv   IN A       192.168.0.2
+br-rtr   IN A       172.16.5.14
+moodle   IN CNAME   hq-srv              # CNAME (алиас)
+wiki     IN CNAME   hq-rtr
+
+[ФАЙЛ ОБРАТНОЙ ЗОНЫ: /var/lib/bind/etc/zone/100.168.192.in-addr.arpa]
+$TTL 86400
+@ IN SOA hq-srv.au-team.irpo. root.au-team.irpo. (
+    2025010101 ; Serial
+    3H         ; Refresh
+    15M        ; Retry
+    1W         ; Expire
+    1D )       ; Minimum
+
+@       IN NS   hq-srv.au-team.irpo.
+1       IN PTR  hq-srv.au-team.irpo.    # 192.168.100.1 -> hq-srv
+
+[ГЕНЕРАЦИЯ КЛЮЧА RNDC]
+rndc-confgen > /etc/bind/rndc.key
+sed -i '6,$d' /etc/bind/rndc.key
+
+rndc позволяет управлять BIND без перезапуска.
+
+[ПРАВА НА ФАЙЛЫ]
+chown named:named /var/lib/bind/etc/zone/*
+
+[ПРОВЕРКА КОНФИГУРАЦИИ]
+named-checkconf                      # проверка синтаксиса
+named-checkconf -z                   # проверка зон
+
+[ЗАПУСК]
+systemctl enable --now bind
+
+[ПРОВЕРКА]
+host hq-srv.au-team.irpo             # A запись
+nslookup moodle.au-team.irpo         # CNAME
+dig @192.168.100.1 hq-srv.au-team.irpo
+dig -x 192.168.100.1                 # PTR запись
+
+--------------------------------------------------------------------------------
+13. CHRONY - СИНХРОНИЗАЦИЯ ВРЕМЕНИ
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+Точное время критично для:
+- Корректной работы служб
+- Логов и аудита
+- Kerberos аутентификации
+- Кластерных систем
+
+Chrony - современный NTP клиент/сервер, лучше работает в виртуальных средах.
+
+Stratum - уровень в иерархии NTP:
+- Stratum 0 - атомные часы, GPS
+- Stratum 1 - серверы напрямую подключенные к stratum 0
+- Stratum 2-15 - серверы синхронизирующиеся с выше стоящими
+
+[УСТАНОВКА]
+apt-get install chrony
+
+[НА СЕРВЕРЕ ISP: /etc/chrony.conf]
+server pool.ntp.org iburst       # внешний источник времени
+allow 192.168.0.0/16             # разрешить синхронизацию этим сетям
+allow 172.16.0.0/12
+local stratum 5                  # работать как сервер даже без внешней синхронизации
+
+[НА КЛИЕНТАХ: /etc/chrony.conf]
+server 172.16.5.1 iburst         # IP сервера времени (ISP)
+
+[ПОЯСНЕНИЕ]
+- iburst - быстрая начальная синхронизация
+- allow - сети, которым разрешено запрашивать время
+- local stratum 5 - локальный источник времени
+
+[ПРИМЕНЕНИЕ]
+systemctl restart chronyd
+
+[ПРОВЕРКА]
+chronyc sources -v                # источники времени
+chronyc tracking                  # статус синхронизации
+timedatectl status                # общая информация
+
+--------------------------------------------------------------------------------
+14. НАСТРОЙКА ЧАСОВОГО ПОЯСА
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+Часовой пояс должен соответствовать месту проведения экзамена.
+Влияет на отображение времени в логах и на пользователях.
+
+[ПРОСМОТР ДОСТУПНЫХ ПОЯСОВ]
+timedatectl list-timezones
+
+[УСТАНОВКА]
+timedatectl set-timezone Europe/Moscow
+
+[ДРУГИЕ ПОЯСА]
+timedatectl set-timezone Asia/Yekaterinburg
+timedatectl set-timezone Asia/Novosibirsk
+
+[ПРОВЕРКА]
+timedatectl
+date
+
+================================================================================
+                    МОДУЛЬ 2: ОРГАНИЗАЦИЯ СЕТЕВОГО АДМИНИСТРИРОВАНИЯ ОС
+================================================================================
+
+--------------------------------------------------------------------------------
+15. RAID-5 МАССИВ
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+RAID (Redundant Array of Independent Disks) - объединение дисков для:
+- Повышения надежности (избыточность)
+- Повышения производительности
+
+Уровни RAID:
+- RAID 0 - чередование (striping), нет избыточности, быстрая запись
+- RAID 1 - зеркалирование, полная копия, надежно
+- RAID 5 - чередование с четностью, нужно минимум 3 диска
+- RAID 6 - два диска четности, выдерживает отказ 2 дисков
+- RAID 10 - комбинация RAID 1 и RAID 0
+
+RAID 5 по заданию:
+- 3 диска по 1 ГБ
+- Эффективная емкость: (n-1) * size = 2 * 1 = 2 ГБ
+- Выдерживает отказ одного диска
+
+[ПРОСМОТР ДИСКОВ]
+lsblk                            # список блочных устройств
+fdisk -l                         # подробная информация
+
+[УСТАНОВКА]
+apt-get install mdadm
+
+[СОЗДАНИЕ RAID-5]
+mdadm --create /dev/md0 -l5 -n3 /dev/sdb /dev/sdc /dev/sdd
+
+[ПОЯСНЕНИЕ ПАРАМЕТРОВ]
+- --create /dev/md0 - создать устройство /dev/md0
+- -l5 - уровень RAID 5
+- -n3 - количество дисков
+- /dev/sdb /dev/sdc /dev/sdd - диски для массива
+
+[ПРОВЕРКА СОСТОЯНИЯ]
+cat /proc/mdstat                 # состояние синхронизации
+mdadm --detail /dev/md0          # подробная информация
+
+[СОЗДАНИЕ ФАЙЛОВОЙ СИСТЕМЫ]
+mkfs.ext4 /dev/md0
+
+[КОНФИГУРАЦИЯ]
+mkdir /etc/mdadm
+echo 'DEVICE partitions' > /etc/mdadm/mdadm.conf
+mdadm --detail --scan >> /etc/mdadm/mdadm.conf
+
+[МОНТИРОВАНИЕ]
+mkdir /raid5
+
+# Добавить в /etc/fstab:
+/dev/md0    /raid5    ext4    defaults    0 0
+
+[ПРИМЕНЕНИЕ]
+mount -av
+
+[ПРОВЕРКА]
+df -h | grep raid5
+lsblk | grep md0
+
+--------------------------------------------------------------------------------
+16. NFS СЕРВЕР И КЛИЕНТ
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+NFS (Network File System) - протокол для совместного доступа к файлам
+по сети. Позволяет монтировать удаленную директорию как локальную.
+
+Применение:
+- Общие документы
+- Домашние директории пользователей
+- Раздача ПО и конфигураций
+
+[=== NFS СЕРВЕР (HQ-SRV) ===]
+
+[УСТАНОВКА]
+apt-get install nfs-server nfs-utils
+
+[СОЗДАНИЕ ДИРЕКТОРИИ]
+mkdir -p /raid5/nfs
+chmod 777 /raid5/nfs              # полный доступ (для простоты)
+
+[ФАЙЛ: /etc/exports]
+/raid5/nfs    192.168.200.0/28(rw,no_root_squash,sync)
+
+[ПОЯСНЕНИЕ ПАРАМЕТРОВ]
+- rw - чтение и запись
+- no_root_squash - root на клиенте = root на сервере
+- sync - синхронная запись (безопаснее, медленнее)
+- async - асинхронная запись (быстрее, риск потери данных)
+
+[ПРИМЕНЕНИЕ]
+exportfs -a                       # экспортировать все из /etc/exports
+systemctl enable --now nfs-server
+
+[ПРОВЕРКА]
+showmount -e                      # показать экспортированные директории
+exportfs -v                       # подробный список
+
+[=== NFS КЛИЕНТ (HQ-CLI) ===]
+
+[УСТАНОВКА]
+apt-get install nfs-utils
+
+[СОЗДАНИЕ ТОЧКИ МОНТИРОВАНИЯ]
+mkdir -p /mnt/nfs
+chmod 777 /mnt/nfs
+
+[РУЧНОЕ МОНТИРОВАНИЕ]
+mount 192.168.100.1:/raid5/nfs /mnt/nfs
+
+[АВТОМАТИЧЕСКОЕ МОНТИРОВАНИЕ]
+# Добавить в /etc/fstab:
+192.168.100.1:/raid5/nfs    /mnt/nfs    nfs    defaults    0 0
+
+[ПРИМЕНЕНИЕ]
+mount -av
+
+[ПРОВЕРКА]
+df -h | grep nfs                  # показать смонтированные NFS
+showmount -e 192.168.100.1        # что экспортирует сервер
+
+--------------------------------------------------------------------------------
+17. ANSIBLE
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+Ansible - система автоматизации конфигурации. Позволяет управлять
+множеством серверов через SSH без установки агентов.
+
+Основные концепции:
+- Inventory - список управляемых хостов
+- Modules - модули для выполнения задач (ping, yum, service...)
+- Playbook - сценарий (YAML файл) с задачами
+- Roles - набор playbooks, templates, files для повторного использования
+
+[УСТАНОВКА (на BR-SRV)]
+apt-get update && apt-get install ansible sshpass
+
+sshpass нужен для аутентификации по паролю (не рекомендуется для продакшена).
+
+[ФАЙЛ ИНВЕНТАРЯ: /etc/ansible/hosts]
+[servers]
+hq-srv ansible_host=192.168.100.1
+hq-cli ansible_host=192.168.200.2
+
+[servers:vars]
+ansible_user=sshuser
+ansible_password=P@ssw0rd
+ansible_python_interpreter=/usr/bin/python3
+ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+
+[ПОЯСНЕНИЕ]
+- [servers] - группа хостов
+- ansible_host - IP адрес хоста
+- [servers:vars] - переменные для группы
+- ansible_python_interpreter - путь к Python
+- StrictHostKeyChecking=no - не проверять ключ хоста
+
+[ФАЙЛ КОНФИГУРАЦИИ: /etc/ansible/ansible.cfg]
+[defaults]
+inventory = /etc/ansible/hosts
+host_key_checking = False
+deprecation_warnings = False
+
+[БАЗОВЫЕ КОМАНДЫ]
+ansible all -m ping              # проверить доступность
+ansible all -a "uptime"          # выполнить команду на всех
+ansible servers -m shell -a "df -h"  # выполнить на группе
+
+[ПРИМЕР ПЛЕЙБУКА: playbook.yml]
+---
+- name: Test playbook
+  hosts: all
+  tasks:
+    - name: Ping servers
+      ping:
+    - name: Show hostname
+      command: hostname
+      register: result
+    - debug: var=result.stdout
+
+[ЗАПУСК ПЛЕЙБУКА]
+ansible-playbook playbook.yml
+
+[ПОЛЕЗНЫЕ МОДУЛИ]
+- apt - управление пакетами
+- service - управление службами
+- copy - копирование файлов
+- template - копирование с подстановкой переменных
+- lineinfile - изменение строки в файле
+- user - управление пользователями
+
+--------------------------------------------------------------------------------
+18. DOCKER + MEDIAWIKI
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+Docker - платформа для запуска приложений в контейнерах.
+Контейнер - изолированная среда с приложением и его зависимостями.
+
+Преимущества:
+- Быстрое развертывание
+- Изоляция приложений
+- Воспроизводимость окружения
+- Легкое масштабирование
+
+Docker Compose - инструмент для запуска многоконтейнерных приложений.
+
+[УСТАНОВКА]
+apt-get install docker-engine docker-compose
+systemctl enable --now docker
+
+[ФАЙЛ: /root/wiki.yml]
+services:
+  mariadb:
+    image: mariadb:latest
+    container_name: mariadb
+    environment:
+      - MYSQL_ROOT_PASSWORD=toor
+      - MYSQL_DATABASE=mediawiki
+      - MYSQL_USER=wiki
+      - MYSQL_PASSWORD=WikiP@ssw0rd
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    restart: always
+
+  mediawiki:
+    image: mediawiki:latest
+    container_name: wiki
+    ports:
+      - "8080:80"               # порт хоста:порт контейнера
+    environment:
+      - MEDIAWIKI_DB_TYPE=mysql
+      - MEDIAWIKI_DB_HOST=mariadb
+      - MEDIAWIKI_DB_USER=wiki
+      - MEDIAWIKI_DB_PASSWORD=WikiP@ssw0rd
+      - MEDIAWIKI_DB_NAME=mediawiki
+    volumes:
+      - /root/mediawiki/LocalSettings.php:/var/www/html/LocalSettings.php
+    depends_on:
+      - mariadb
+    restart: always
+
+volumes:
+  mariadb_data:
+
+[ПОЯСНЕНИЕ]
+- image - Docker образ для контейнера
+- environment - переменные окружения
+- ports - проброс портов
+- volumes - монтирование томов (сохранение данных)
+- depends_on - порядок запуска
+- restart: always - перезапуск при падении
+
+[ЗАПУСК]
+mkdir -p /root/mediawiki
+docker compose -f /root/wiki.yml up -d
+
+[ПЕРВАЯ УСТАНОВКА]
+1. Закомментировать строку volumes с LocalSettings.php
+2. Зайти в браузере: http://IP:8080
+3. Пройти установку, создать пользователя wiki/P@ssw0rd
+4. Скачать LocalSettings.php
+5. Скопировать на сервер в /root/mediawiki/LocalSettings.php
+6. Раскомментировать volumes
+7. Перезапустить:
+
+docker compose -f /root/wiki.yml stop
+docker compose -f /root/wiki.yml up -d
+
+[ПОЛЕЗНЫЕ КОМАНДЫ]
+docker ps                        # запущенные контейнеры
+docker ps -a                     # все контейнеры
+docker logs wiki                 # логи контейнера
+docker exec -it wiki bash        # войти в контейнер
+docker compose down              # остановить и удалить
+
+--------------------------------------------------------------------------------
+19. MOODLE
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+Moodle - система управления обучением (LMS). Открытый исходный код.
+Использует PHP + базу данных (MySQL/MariaDB/PostgreSQL).
+
+Требования:
+- Web-сервер (Apache/Nginx)
+- PHP 7.4+ с расширениями
+- База данных
+
+[УСТАНОВКА ЗАВИСИМОСТЕЙ]
+apt-get install -y apache2 php8.2 apache2-mods apache2-mod_php8.2 mariadb-server
+
+apt-get install -y php8.2-opcache php8.2-curl php8.2-gd php8.2-intl \
+php8.2-mysqlnd-mysqli php8.2-xmlrpc php8.2-zip php8.2-soap \
+php8.2-mbstring php8.2-xmlreader php8.2-fileinfo php8.2-sodium
+
+[ЗАПУСК СЛУЖБ]
+systemctl enable --now httpd2 mariadb
+
+[НАСТРОЙКА MARIADB]
+mariadb -u root
+
+CREATE DATABASE moodle DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'moodle'@'localhost' IDENTIFIED BY 'P@ssw0rd';
+GRANT ALL PRIVILEGES ON moodle.* TO 'moodle'@'localhost';
+FLUSH PRIVILEGES;
+EXIT;
+
+[ПОЯСНЕНИЕ SQL]
+- CREATE DATABASE - создать базу
+- utf8mb4 - полная поддержка Unicode (включая эмодзи)
+- CREATE USER - создать пользователя
+- GRANT ALL - дать все права на базу
+
+[СКАЧИВАНИЕ И УСТАНОВКА MOODLE]
+wget https://download.moodle.org/download.php/direct/stable405/moodle-latest-405.tgz
+tar -xf moodle-latest-405.tgz
+mv moodle /var/www/html/
+mkdir /var/www/moodledata          # директория для данных
+chown -R apache2:apache2 /var/www/html /var/www/moodledata
+rm /var/www/html/index.html        # удалить страницу Apache по умолчанию
+
+[НАСТРОЙКА APACHE]
+Файл: /etc/httpd2/conf/sites-available/default.conf
+
+<VirtualHost *:80>
+    DocumentRoot /var/www/html/moodle
+    ServerName hq-srv.au-team.irpo
+    <Directory /var/www/html/moodle>
+        Options FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+</VirtualHost>
+
+[НАСТРОЙКА PHP]
+Файл: /etc/php/8.2/apache2-mod_php/php.ini
+
+max_input_vars = 5000            # для форм с большим количеством полей
+upload_max_filesize = 100M       # максимальный размер загрузки
+post_max_size = 100M             # максимальный размер POST
+
+[ПРИМЕНЕНИЕ]
+systemctl restart httpd2
+
+[ВЕБ-УСТАНОВКА]
+1. Зайти с клиента: http://192.168.100.1/install.php
+2. Выбрать язык
+3. Подтвердить пути
+4. Выбрать драйвер БД: MariaDB
+5. Ввести настройки БД:
+   - Хост: localhost
+   - База: moodle
+   - Пользователь: moodle
+   - Пароль: P@ssw0rd
+6. Создать администратора: admin / P@ssw0rd
+7. Название сайта = номер рабочего места
+
+[ЕСЛИ НУЖНО ИСПРАВИТЬ CONFIG.PHP]
+Файл: /var/www/html/moodle/config.php
+
+$CFG->dbtype = 'mariadb';        # вместо 'mysql'
+
+--------------------------------------------------------------------------------
+20. NGINX - ОБРАТНЫЙ ПРОКСИ
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+Обратный прокси (reverse proxy) принимает запросы от клиентов и
+перенаправляет их на внутренние серверы.
+
+Преимущества:
+- Сокрытие внутренней структуры
+- Балансировка нагрузки
+- Кэширование
+- SSL termination
+
+По заданию:
+- moodle.au-team.irpo -> HQ-SRV:80
+- wiki.au-team.irpo -> BR-SRV:8080
+
+[УСТАНОВКА]
+apt-get install nginx
+
+[ФАЙЛ: /etc/nginx/nginx.conf]
+user http;
+worker_processes auto;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    sendfile on;
+    keepalive_timeout 65;
+
+    # Moodle proxy
+    server {
+        listen 80;
+        server_name moodle.au-team.irpo;
+
+        location / {
+            proxy_pass http://192.168.100.1:80;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+
+    # Wiki proxy
+    server {
+        listen 80;
+        server_name wiki.au-team.irpo;
+
+        location / {
+            proxy_pass http://192.168.0.2:8080;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+}
+
+[ПОЯСНЕНИЕ]
+- server_name - доменное имя для этого блока
+- proxy_pass - куда перенаправлять запросы
+- proxy_set_header - добавить заголовки к запросу
+- X-Real-IP - IP клиента для логов на backend
+
+[ПРОВЕРКА КОНФИГУРАЦИИ]
+nginx -t                         # проверить синтаксис
+
+[ЗАПУСК]
+systemctl enable --now nginx
+
+[ПРОВЕРКА]
+curl -H "Host: moodle.au-team.irpo" http://172.16.4.14
+curl -H "Host: wiki.au-team.irpo" http://172.16.4.14
+
+--------------------------------------------------------------------------------
+21. SAMBA DOMAIN CONTROLLER
+--------------------------------------------------------------------------------
+
+[ОБЪЯСНЕНИЕ]
+Samba AD DC - контроллер домена Active Directory на Linux.
+Позволяет управлять пользователями, группами, компьютерами.
+
+Функции:
+- Аутентификация пользователей (Kerberos)
+- LDAP директория
+- DNS для домена
+- Group Policies (ограниченно)
+
+[УСТАНОВКА]
+apt-get install task-samba-dc
+
+[ПОДГОТОВКА]
+# Остановить существующие службы
+systemctl stop samba smb nmb winbind 2>/dev/null
+rm -rf /var/lib/samba/private/*
+rm -rf /var/lib/samba/sysvol/*
+rm /etc/samba/smb.conf 2>/dev/null
+
+[НАСТРОЙКА KERBEROS: /etc/krb5.conf]
+[libdefaults]
+    default_realm = AU-TEAM.IRPO
+    dns_lookup_realm = false
+    dns_lookup_kdc = true
+
+[СОЗДАНИЕ ДОМЕНА]
+samba-tool domain provision \
+    --realm=AU-TEAM.IRPO \
+    --domain=AU-TEAM \
+    --server-role=dc \
+    --use-rfc2307 \
+    --dns-backend=SAMBA_INTERNAL \
+    --adminpass='P@ssw0rd'
+
+[ПОЯСНЕНИЕ ПАРАМЕТРОВ]
+- --realm - Kerberos realm (верхний регистр)
+- --domain - NetBIOS имя домена
+- --server-role=dc - роль контроллера домена
+- --use-rfc2307 - поддержка POSIX атрибутов (UID, GID)
+- --dns-backend - встроенный DNS сервер
+- --adminpass - пароль администратора
+
+[КОПИРОВАНИЕ КОНФИГУРАЦИИ KERBEROS]
+cp /var/lib/samba/private/krb5.conf /etc/krb5.conf
+
+[ЗАПУСК]
+systemctl enable --now samba
+
+[СОЗДАНИЕ ПОЛЬЗОВАТЕЛЕЙ]
+samba-tool user create user1hq P@ssw0rd
+samba-tool user create user2hq P@ssw0rd
+samba-tool user create user3hq P@ssw0rd
+samba-tool user create user4hq P@ssw0rd
+samba-tool user create user5hq P@ssw0rd
+
+[СОЗДАНИЕ ГРУППЫ]
+samba-tool group add hq
+
+[ДОБАВЛЕНИЕ ПОЛЬЗОВАТЕЛЕЙ В ГРУППУ]
+samba-tool group addmembers hq user1hq,user2hq,user3hq,user4hq,user5hq
+
+[ИМПОРТ ИЗ CSV]
+Файл: /opt/users.csv
+username,password
+user1hq,P@ssw0rd
+user2hq,P@ssw0rd
+
+Скрипт импорта:
+while IFS=',' read -r username password; do
+    samba-tool user create "$username" "$password" 2>/dev/null || \
+    samba-tool user setpassword "$username" --newpassword="$password"
+    samba-tool group addmembers hq "$username"
+done < <(tail -n +2 /opt/users.csv)
+
+[ВВОД КЛИЕНТА В ДОМЕН (HQ-CLI)]
+apt-get install task-samba-client
+system-auth write sss
+auth-local add <IP_BR-SRV>
+net ads join -U Administrator
+
+[ПОЛЕЗНЫЕ КОМАНДЫ]
+samba-tool user list           # список пользователей
+samba-tool group list          # список групп
+samba-tool domain level show   # уровень домена
+
+--------------------------------------------------------------------------------
+22. ЯНДЕКС БРАУЗЕР
+--------------------------------------------------------------------------------
+
+[УСТАНОВКА]
+apt-get install yandex-browser-stable
+
+[ЗАПУСК]
+yandex-browser-stable
+
+================================================================================
+                           СВОДНЫЕ ТАБЛИЦЫ
+================================================================================
+
+--------------------------------------------------------------------------------
+ТАБЛИЦА IP-АДРЕСАЦИИ
+--------------------------------------------------------------------------------
+
+┌─────────────────┬────────────┬────────────────────┬────────┬────────────────┐
+│ Сеть            │ VLAN       │ Диапазон            │Адресов │ Назначение     │
+├─────────────────┼────────────┼────────────────────┼────────┼────────────────┤
+│ HQ-SRV сеть     │ VLAN 100   │ 192.168.100.0/26    │ 64     │ Серверы HQ     │
+│ HQ-CLI сеть     │ VLAN 200   │ 192.168.200.0/28    │ 16     │ Клиенты HQ     │
+│ BR-SRV сеть     │ -          │ 192.168.0.0/27      │ 32     │ Серверы BR     │
+│ Управление      │ VLAN 999   │ 192.168.99.0/29     │ 8      │ Management     │
+│ ISP-HQ линк     │ -          │ 172.16.4.0/28       │ 16     │ ISP<->HQ-RTR   │
+│ ISP-BR линк     │ -          │ 172.16.5.0/28       │ 16     │ ISP<->BR-RTR   │
+│ Туннель         │ -          │ 10.0.0.0/30         │ 2      │ GRE туннель    │
+└─────────────────┴────────────┴────────────────────┴────────┴────────────────┘
+
+--------------------------------------------------------------------------------
+ТАБЛИЦА DNS ЗАПИСЕЙ
+--------------------------------------------------------------------------------
+
+┌─────────────────┬──────────────────────────┬───────────┬───────────────────┐
+│ Устройство      │ Запись                   │ Тип       │ IP-адрес          │
+├─────────────────┼──────────────────────────┼───────────┼───────────────────┤
+│ HQ-RTR          │ hq-rtr.au-team.irpo      │ A, PTR    │ 172.16.4.14       │
+│ BR-RTR          │ br-rtr.au-team.irpo      │ A         │ 172.16.5.14       │
+│ HQ-SRV          │ hq-srv.au-team.irpo      │ A, PTR    │ 192.168.100.1     │
+│ HQ-CLI          │ hq-cli.au-team.irpo      │ A, PTR    │ 192.168.200.2     │
+│ BR-SRV          │ br-srv.au-team.irpo      │ A         │ 192.168.0.2       │
+│ Moodle          │ moodle.au-team.irpo      │ CNAME     │ -> hq-srv         │
+│ Wiki            │ wiki.au-team.irpo        │ CNAME     │ -> hq-rtr         │
+└─────────────────┴──────────────────────────┴───────────┴───────────────────┘
+
+--------------------------------------------------------------------------------
+ПОРТЫ СЛУЖБ
+--------------------------------------------------------------------------------
+
+┌─────────────────┬───────────┬─────────────┬────────────────────────────────┐
+│ Служба          │ Порт      │ Протокол    │ Назначение                     │
+├─────────────────┼───────────┼─────────────┼────────────────────────────────┤
+│ SSH             │ 22/2024   │ TCP         │ Удаленное управление           │
+│ HTTP            │ 80        │ TCP         │ Web-серверы                    │
+│ HTTPS           │ 443       │ TCP         │ Web-серверы (SSL)              │
+│ DNS             │ 53        │ TCP/UDP     │ DNS-сервер                     │
+│ DHCP            │ 67/68     │ UDP         │ DHCP сервер/клиент             │
+│ NTP             │ 123       │ UDP         │ Синхронизация времени          │
+│ NFS             │ 2049      │ TCP/UDP     │ Файловая система               │
+│ SNMP            │ 161       │ UDP         │ Мониторинг                     │
+│ Syslog          │ 514       │ UDP         │ Логирование                    │
+└─────────────────┴───────────┴─────────────┴────────────────────────────────┘
+
+--------------------------------------------------------------------------------
+ПОЛЕЗНЫЕ КОМАНДЫ
+--------------------------------------------------------------------------------
+
+┌─────────────────────────────┬──────────────────────────────────────────────┐
+│ Действие                    │ Команда                                      │
+├─────────────────────────────┼──────────────────────────────────────────────┤
+│ Проверка IP                 │ ip a, ip addr show                           │
+│ Проверка маршрутов          │ ip r, ip route show                          │
+│ Проверка DNS                │ host, nslookup, dig                          │
+│ Открытые порты              │ ss -tlnp, netstat -tlnp                      │
+│ Проверка NAT                │ iptables -t nat -L -n -v                     │
+│ OSPF соседи                 │ vtysh -c "show ip ospf neighbor"             │
+│ OSPF маршруты               │ vtysh -c "show ip route ospf"                │
+│ Туннель статус              │ ip tunnel show, ip link show tun0            │
+│ NFS экспорты                │ showmount -e, df -h                          │
+│ Docker контейнеры           │ docker ps, docker compose ps                 │
+│ Логи службы                 │ journalctl -u servicename -f                 │
+│ Статус службы               │ systemctl status servicename                 │
+│ Перезапуск сети             │ systemctl restart network                    │
+│ Файрвол правила             │ iptables -L -n, iptables-save                │
+│ Диски                       │ df -h, lsblk, fdisk -l                       │
+│ RAID статус                 │ cat /proc/mdstat, mdadm --detail /dev/md0    │
+│ Samba пользователи          │ samba-tool user list                         │
+│ Samba статус                │ samba-tool domain level show                 │
+│ Синхронизация времени       │ chronyc sources -v, chronyc tracking         │
+│ DNS проверка зоны           │ named-checkconf, named-checkconf -z          │
+└─────────────────────────────┴──────────────────────────────────────────────┘
+
+================================================================================
+                                КОНЕЦ ШПАРГАЛКИ
+================================================================================
