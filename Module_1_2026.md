@@ -329,11 +329,11 @@ systemctl restart network
 ```bash
 apt-get update && apt-get install iptables -y
 
-iptables -t nat -A POSTROUTING -o enp7s1 -s 172.16.1.0/28 -j MASQUERADE
-iptables -t nat -A POSTROUTING -o enp7s1 -s 172.16.2.0/28 -j MASQUERADE
+iptables -t nat -A POSTROUTING -o ens33 -s 172.16.4.0/28 -j MASQUERADE
+iptables -t nat -A POSTROUTING -o ens33 -s 172.16.5.0/28 -j MASQUERADE
 
-iptables -A FORWARD -i ens19 -o enp7s1 -s 172.16.1.0/28 -j ACCEPT
-iptables -A FORWARD -i ens20 -o enp7s1 -s 172.16.2.0/28 -j ACCEPT
+iptables -A FORWARD -i ens34 -o ens33 -s 172.16.4.0/28 -j ACCEPT
+iptables -A FORWARD -i ens35 -o ens33 -s 172.16.5.0/28 -j ACCEPT
 
 iptables-save > /etc/sysconfig/iptables
 systemctl enable iptables --now
