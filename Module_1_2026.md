@@ -63,21 +63,21 @@ hostnamectl set-hostname br-srv.au-team.irpo; exec bash
 
 ### ISP
 ```bash
-mkdir /etc/net/ifaces/enp7s2
-mkdir /etc/net/ifaces/enp7s3
+mkdir /etc/net/ifaces/ens34
+mkdir /etc/net/ifaces/ens35
 ```
 ```bash
-vim /etc/net/ifaces/enp7s2/options
+vim /etc/net/ifaces/ens34/options
 BOOTPROTO=static
 TYPE=eth
-vim /etc/net/ifaces/enp7s2/ipv4address
+vim /etc/net/ifaces/ens34/ipv4address
 172.16.1.1/28
 ```
 ```bash
-vim /etc/net/ifaces/enp7s3/options
+vim /etc/net/ifaces/ens35/options
 BOOTPROTO=static
 TYPE=eth
-vim /etc/net/ifaces/enp7s3/ipv4address
+vim /etc/net/ifaces/ens35/ipv4address
 172.16.2.1/28
 ```
 ```bash
@@ -90,18 +90,18 @@ ip -c -br a
 ```bash
 lo               UNKNOWN        127.0.0.1/8 ::1/128 
 ens33           UP             192.168.120.157/24 fe80::be24:11ff:fe74:fa7/64 
-enp7s2           UP             172.16.1.1/28 fe80::be24:11ff:fed1:a8dc/64 
-enp7s3           UP             172.16.2.1/28 fe80::be24:11ff:fed6:e399/64
+ens34           UP             172.16.1.1/28 fe80::be24:11ff:fed1:a8dc/64 
+ens35           UP             172.16.2.1/28 fe80::be24:11ff:fed6:e399/64
 ```
 > [!NOTE] 
 > ⚠️ 💡 Примечание: Для ens33 вывод будет отличаться из-за того что у всех этот интерфейс зависит от их собственной локальной сети, так как это интерфейс через который идет выход в интернет с помощью Bridge из Proxmox в VMware, в VMware обязательно нужно было указать Bridge в типе сетевого подключения, тип NAT или создание отдельной Network внутри VMware может вызывать нестабильность в работе!
 
 ### HQ-RTR
 ```bash
-mkdir /etc/net/ifaces/enp7s2
-mkdir /etc/net/ifaces/enp7s2.100
-mkdir /etc/net/ifaces/enp7s2.200
-mkdir /etc/net/ifaces/enp7s2.999
+mkdir /etc/net/ifaces/ens34
+mkdir /etc/net/ifaces/ens34.100
+mkdir /etc/net/ifaces/ens34.200
+mkdir /etc/net/ifaces/ens34.999
 ```
 ```bash
 vim /etc/net/ifaces/ens33/options
@@ -126,36 +126,36 @@ BOOTPROTO=none
 TYPE=eth
 ```
 ```bash
-vim /etc/net/ifaces/enp7s2.100/options
+vim /etc/net/ifaces/ens34.100/options
 BOOTPROTO=static
 TYPE=vlan
 VID=100
-HOST=enp7s2
+HOST=ens34
 ```
 ```bash
-vim /etc/net/ifaces/enp7s2.100/ipv4address
+vim /etc/net/ifaces/ens34.100/ipv4address
 192.168.100.1/27
 ```
 ```bash
-vim /etc/net/ifaces/enp7s2.200/options
+vim /etc/net/ifaces/ens34.200/options
 BOOTPROTO=static
 TYPE=vlan
 VID=200
-HOST=enp7s2
+HOST=ens34
 ```
 ```bash
-vim /etc/net/ifaces/enp7s2.200/ipv4address
+vim /etc/net/ifaces/ens34.200/ipv4address
 192.168.200.65/28
 ```
 ```bash
-vim /etc/net/ifaces/enp7s2.999/options
+vim /etc/net/ifaces/ens34.999/options
 BOOTPROTO=static
 TYPE=vlan
 VID=999
-HOST=enp7s2
+HOST=ens34
 ```
 ```bash
-vim /etc/net/ifaces/enp7s2.999/ipv4address
+vim /etc/net/ifaces/ens34.999/ipv4address
 192.168.99.89/29
 ```
 ```bash
@@ -168,10 +168,10 @@ ip -c -br a
 ```bash
 lo               UNKNOWN        127.0.0.1/8 ::1/128 
 ens33           UP             172.16.1.2/28 fe80::be24:11ff:feda:daba/64 
-enp7s2           UP             fe80::be24:11ff:feae:ad50/64 
-enp7s2.100@enp7s2 UP             192.168.100.1/27 fe80::be24:11ff:feae:ad50/64 
-enp7s2.200@enp7s2 UP             192.168.200.65/28 fe80::be24:11ff:feae:ad50/64 
-enp7s2.999@enp7s2 UP             192.168.99.89/29 fe80::be24:11ff:feae:ad50/64
+ens34           UP             fe80::be24:11ff:feae:ad50/64 
+ens34.100@enp7s2 UP             192.168.100.1/27 fe80::be24:11ff:feae:ad50/64 
+ens34.200@enp7s2 UP             192.168.200.65/28 fe80::be24:11ff:feae:ad50/64 
+ens34.999@enp7s2 UP             192.168.99.89/29 fe80::be24:11ff:feae:ad50/64
 ```
 > [!CAUTION]
 > ⚠️ 💡 Важно!: Так как VLAN созданы через network внутри Proxmox, обязательно идем в веб панель Proxmox VE, заходим в раздел Server View > Datacenter > pve. В этом разделе в открытом списке выбираем 10103, 10104 машины (HQ-SRV,HQ-CLI), заходим в настройки во вкладку Hardware, меняем в графе Network Device (net6) VLAN tag, с того который там указан (если не указан, то включаем VLAN tag, и прописываем -> 100 для HQ-CLI, и 200 для HQ-SRV.) Перезапускать машины не нужно.
@@ -220,15 +220,15 @@ ens33           UP             192.168.100.2/27 fe80::be24:11ff:fef0:121/64
 
 ### BR-RTR
 ```bash
-mkdir /etc/net/ifaces/enp7s2/
+mkdir /etc/net/ifaces/ens34/
 ```
 ```bash
-vim /etc/net/ifaces/enp7s2/options
+vim /etc/net/ifaces/ens34/options
 BOOTPROTO=static
 TYPE=eth
 ```
 ```bash
-vim /etc/net/ifaces/enp7s2/ipv4address
+vim /etc/net/ifaces/ens34/ipv4address
 192.168.3.1/28
 ```
 ```bash
@@ -258,7 +258,7 @@ ip -c -br a
 ```bash
 lo               UNKNOWN        127.0.0.1/8 ::1/128 
 ens33           UP             172.16.2.2/28 fe80::be24:11ff:fe33:b6b2/64 
-enp7s2           UP             192.168.3.1/28 fe80::be24:11ff:fea1:62b4/64
+ens34           UP             192.168.3.1/28 fe80::be24:11ff:fea1:62b4/64
 ```
 
 ### BR-SRV
