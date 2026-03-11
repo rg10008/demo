@@ -2,9 +2,9 @@
 
 echo "===== Настройка сети ====="
 
-# список интерфейсов
 echo "Доступные интерфейсы:"
 interfaces=$(ls /sys/class/net | grep -v lo)
+
 select IFACE in $interfaces
 do
     if [ -n "$IFACE" ]; then
@@ -28,8 +28,6 @@ sudo mkdir -p $DIR
 
 if [ "$mode" == "1" ]; then
 
-    echo "Настройка DHCP..."
-
     echo "TYPE=eth" > $DIR/options
     echo "BOOTPROTO=dhcp" >> $DIR/options
     echo "ONBOOT=yes" >> $DIR/options
@@ -39,16 +37,24 @@ if [ "$mode" == "1" ]; then
 elif [ "$mode" == "2" ]; then
 
     read -p "Введите IP (пример 192.168.1.10/24): " IP
-    read -p "Введите шлюз (route): " GW
-    read -p "Введите DNS: " DNS
+    read -p "Введите шлюз (route) [можно оставить пустым]: " GW
+    read -p "Введите DNS [можно оставить пустым]: " DNS
 
     echo "TYPE=eth" > $DIR/options
     echo "BOOTPROTO=static" >> $DIR/options
     echo "ONBOOT=yes" >> $DIR/options
 
     echo "$IP" > $DIR/ipv4address
-    echo "default via $GW" > $DIR/ipv4route
-    echo "nameserver $DNS" > $DIR/resolv.conf
+
+    # если указан шлюз
+    if [ ! -z "$GW" ]; then
+        echo "default via $GW" > $DIR/ipv4route
+    fi
+
+    # если указан DNS
+    if [ ! -z "$DNS" ]; then
+        echo "nameserver $DNS" > $DIR/resolv.conf
+    fi
 
 else
     echo "Неверный выбор"
