@@ -1,37 +1,37 @@
 #!/bin/bash
 
-echo "===== Настройка NAT и маршрутизации ====="
+echo "===== Настройка NAT ====="
 
-echo
 echo "Доступные интерфейсы:"
 interfaces=$(ls /sys/class/net | grep -v lo)
 
 select WAN in $interfaces
 do
-    if [ -n "$WAN" ]; then
-        break
-    fi
+    [ -n "$WAN" ] && break
 done
 
-echo "Выбран внешний интерфейс: $WAN"
+echo "WAN интерфейс: $WAN"
 
-echo
-echo "Выберите интерфейс для сети 172.16.4.0/28"
+echo "Выберите первый LAN интерфейс"
 select LAN1 in $interfaces
 do
-    if [ -n "$LAN1" ]; then
-        break
-    fi
+    [ -n "$LAN1" ] && break
+done
+
+echo "Выберите второй LAN интерфейс"
+select LAN2 in $interfaces
+do
+    [ -n "$LAN2" ] && break
 done
 
 echo
-echo "Выберите интерфейс для сети 172.16.5.0/28"
-select LAN2 in $interfaces
-do
-    if [ -n "$LAN2" ]; then
-        break
-    fi
-done
+echo "Определение сетей..."
+
+NET1=$(ip -o -f inet addr show $LAN1 | awk '{print $4}')
+NET2=$(ip -o -f inet addr show $LAN2 | awk '{print $4}')
+
+echo "Сеть $LAN1: $NET1"
+echo "Сеть $LAN2: $NET2"
 
 echo
 echo "Включение IP forwarding..."
@@ -45,20 +45,16 @@ fi
 sysctl -p
 
 echo
-echo "Перезапуск сети..."
-systemctl restart network
-
-echo
 echo "Настройка NAT..."
 
-iptables -t nat -A POSTROUTING -o $WAN -s 172.16.4.0/28 -j MASQUERADE
-iptables -t nat -A POSTROUTING -o $WAN -s 172.16.5.0/28 -j MASQUERADE
+iptables -t nat -A POSTROUTING -o $WAN -s $NET1 -j MASQUERADE
+iptables -t nat -A POSTROUTING -o $WAN -s $NET2 -j MASQUERADE
 
 echo
 echo "Настройка FORWARD..."
 
-iptables -A FORWARD -i $LAN1 -o $WAN -s 172.16.4.0/28 -j ACCEPT
-iptables -A FORWARD -i $LAN2 -o $WAN -s 172.16.5.0/28 -j ACCEPT
+iptables -A FORWARD -i $LAN1 -o $WAN -s $NET1 -j ACCEPT
+iptables -A FORWARD -i $LAN2 -o $WAN -s $NET2 -j ACCEPT
 
 echo
 echo "Сохранение правил..."
@@ -69,12 +65,8 @@ systemctl enable iptables --now
 systemctl restart iptables
 
 echo
-echo "===== Статус iptables ====="
-systemctl status iptables --no-pager
-
-echo
 echo "===== NAT таблица ====="
 iptables -t nat -L -n -v
 
 echo
-echo "Настройка завершена"
+echo "Готово"
