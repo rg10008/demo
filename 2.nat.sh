@@ -1,5 +1,27 @@
 #!/bin/bash
 
+# Вопрос об очистке NAT таблицы
+echo
+echo "Очистить существующие правила NAT перед настройкой?"
+select CLEAR_NAT in "Да" "Нет"
+do
+    case $CLEAR_NAT in
+        "Да")
+            echo "Очистка NAT таблицы..."
+            iptables -t nat -F
+            echo "NAT таблица очищена."
+            break
+            ;;
+        "Нет")
+            echo "Сохраняем существующие правила NAT."
+            break
+            ;;
+        *)
+            echo "Выберите 1 или 2"
+            ;;
+    esac
+done
+
 echo "===== Настройка NAT ====="
 
 echo "Доступные интерфейсы:"
