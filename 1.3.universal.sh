@@ -30,7 +30,7 @@ else
         useradd -m -u $USER_UID -s /bin/bash $USERNAME
     fi
 
-    echo "$USERNAME:$PASSWORD" | chpasswd
+    echo "$USERNAME:$PASSWORD" | sudo chpasswd
 fi
 
 echo "Настройка sudo..."
