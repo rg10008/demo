@@ -22,7 +22,7 @@ do
     esac
 done
 
-echo "===== Настройка NAT ====="
+echo "===== Настройка NAT(Выберете WAN) ====="
 
 echo "Доступные интерфейсы:"
 interfaces=$(ls /sys/class/net | grep -v lo)
