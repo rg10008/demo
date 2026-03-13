@@ -69,19 +69,19 @@ sysctl -p
 echo
 echo "Настройка NAT..."
 
-iptables -t nat -A POSTROUTING -o $WAN -s $NET1 -j MASQUERADE
-iptables -t nat -A POSTROUTING -o $WAN -s $NET2 -j MASQUERADE
+sudo iptables -t nat -A POSTROUTING -o $WAN -s $NET1 -j MASQUERADE
+sudo iptables -t nat -A POSTROUTING -o $WAN -s $NET2 -j MASQUERADE
 
 echo
 echo "Настройка FORWARD..."
 
-iptables -A FORWARD -i $LAN1 -o $WAN -s $NET1 -j ACCEPT
-iptables -A FORWARD -i $LAN2 -o $WAN -s $NET2 -j ACCEPT
+sudo iptables -A FORWARD -i $LAN1 -o $WAN -s $NET1 -j ACCEPT
+sudo iptables -A FORWARD -i $LAN2 -o $WAN -s $NET2 -j ACCEPT
 
 echo
 echo "Сохранение правил..."
 
-iptables-save > /etc/sysconfig/iptables
+sudo iptables-save > /etc/sysconfig/iptables
 
 systemctl enable iptables --now
 systemctl restart iptables
