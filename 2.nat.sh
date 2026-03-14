@@ -128,7 +128,7 @@ done
 
 # Добавляем разрешение для установленных соединений
 echo "  Добавляем правила для установленных соединений..."
-iptables -A FORWARD -i "$WAN" -o "$WAN" -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A FORWARD -i "$WAN" -m state --state ESTABLISHED,RELATED -j ACCEPT
 
 echo
 echo "Сохранение правил..."
