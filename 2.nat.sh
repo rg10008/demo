@@ -9,7 +9,8 @@ do
         "Да")
             echo "Очистка NAT таблицы..."
             iptables -t nat -F
-            echo "NAT таблица очищена."
+            iptables -F FORWARD
+            echo "NAT таблица и FORWARD цепочка очищены."
             break
             ;;
         "Нет")
@@ -22,46 +23,79 @@ do
     esac
 done
 
-echo "===== Настройка NAT(Выберете WAN) ====="
+echo
+echo "===== Настройка NAT (Выберите WAN) ====="
 
-echo "Доступные интерфейсы:"
-interfaces=$(ls /sys/class/net | grep -v lo)
+# Получаем список всех интерфейсов кроме loopback
+all_interfaces=$(ls /sys/class/net | grep -v lo)
 
-select WAN in $interfaces
+echo "Доступные интерфейсы: $all_interfaces"
+echo
+
+select WAN in $all_interfaces
 do
     [ -n "$WAN" ] && break
 done
 
 echo "WAN интерфейс: $WAN"
 
-echo "Выберите первый LAN интерфейс"
-select LAN1 in $interfaces
-do
-    [ -n "$LAN1" ] && break
+# Автоматически определяем LAN интерфейсы (все кроме WAN и lo)
+LAN_INTERFACES=()
+for iface in $all_interfaces; do
+    if [ "$iface" != "$WAN" ]; then
+        LAN_INTERFACES+=("$iface")
+    fi
 done
 
-echo "Выберите второй LAN интерфейс"
-select LAN2 in $interfaces
-do
-    [ -n "$LAN2" ] && break
+# Проверяем, есть ли LAN интерфейсы
+if [ ${#LAN_INTERFACES[@]} -eq 0 ]; then
+    echo "Ошибка: Не найдено LAN интерфейсов!"
+    exit 1
+fi
+
+echo
+echo "===== Автоматически определены LAN интерфейсы ====="
+for i in "${!LAN_INTERFACES[@]}"; do
+    echo "LAN$((i+1)): ${LAN_INTERFACES[$i]}"
 done
 
 echo
 echo "Определение сетей..."
 
-NET1=$(ip -o -f inet addr show $LAN1 | awk '{print $4}')
-NET2=$(ip -o -f inet addr show $LAN2 | awk '{print $4}')
+# Массивы для хранения сетей
+declare -a LAN_NETS
 
-echo "Сеть $LAN1: $NET1"
-echo "Сеть $LAN2: $NET2"
+for i in "${!LAN_INTERFACES[@]}"; do
+    iface="${LAN_INTERFACES[$i]}"
+    net=$(ip -o -f inet addr show "$iface" | awk '{print $4}')
+    
+    if [ -z "$net" ]; then
+        echo "Предупреждение: Интерфейс $iface не имеет IPv4 адреса, пропускаем..."
+        continue
+    fi
+    
+    LAN_NETS+=("$net")
+    echo "Сеть $iface: $net"
+done
+
+# Проверяем, есть ли сети для настройки
+if [ ${#LAN_NETS[@]} -eq 0 ]; then
+    echo "Ошибка: Ни один LAN интерфейс не имеет IPv4 адреса!"
+    exit 1
+fi
 
 echo
 echo "Включение IP forwarding..."
 
-if ! grep -q "net.ipv4.ip_forward" /etc/net/sysctl.conf; then
-    echo "net.ipv4.ip_forward = 1" >> /etc/net/sysctl.conf
+SYSCTL_FILE="/etc/sysctl.conf"
+if [ -f /etc/net/sysctl.conf ]; then
+    SYSCTL_FILE="/etc/net/sysctl.conf"
+fi
+
+if ! grep -q "net.ipv4.ip_forward" "$SYSCTL_FILE"; then
+    echo "net.ipv4.ip_forward = 1" >> "$SYSCTL_FILE"
 else
-    sed -i 's/net.ipv4.ip_forward.*/net.ipv4.ip_forward = 1/' /etc/net/sysctl.conf
+    sed -i 's/net.ipv4.ip_forward.*/net.ipv4.ip_forward = 1/' "$SYSCTL_FILE"
 fi
 
 sysctl -p
@@ -69,26 +103,69 @@ sysctl -p
 echo
 echo "Настройка NAT..."
 
-sudo iptables -t nat -A POSTROUTING -o $WAN -s $NET1 -j MASQUERADE
-sudo iptables -t nat -A POSTROUTING -o $WAN -s $NET2 -j MASQUERADE
+for i in "${!LAN_INTERFACES[@]}"; do
+    iface="${LAN_INTERFACES[$i]}"
+    net="${LAN_NETS[$i]}"
+    
+    if [ -n "$net" ]; then
+        echo "  Настройка NAT для $iface ($net)..."
+        iptables -t nat -A POSTROUTING -o "$WAN" -s "$net" -j MASQUERADE
+    fi
+done
 
 echo
 echo "Настройка FORWARD..."
 
-sudo iptables -A FORWARD -i $LAN1 -o $WAN -s $NET1 -j ACCEPT
-sudo iptables -A FORWARD -i $LAN2 -o $WAN -s $NET2 -j ACCEPT
+for i in "${!LAN_INTERFACES[@]}"; do
+    iface="${LAN_INTERFACES[$i]}"
+    net="${LAN_NETS[$i]}"
+    
+    if [ -n "$net" ]; then
+        echo "  Настройка FORWARD для $iface ($net)..."
+        iptables -A FORWARD -i "$iface" -o "$WAN" -s "$net" -j ACCEPT
+    fi
+done
+
+# Добавляем разрешение для установленных соединений
+echo "  Добавляем правила для установленных соединений..."
+iptables -A FORWARD -i "$WAN" -o "$WAN" -m state --state ESTABLISHED,RELATED -j ACCEPT
 
 echo
 echo "Сохранение правил..."
 
-sudo iptables-save > /etc/sysconfig/iptables
+# Проверяем наличие директории для сохранения
+if [ -d /etc/sysconfig ]; then
+    iptables-save > /etc/sysconfig/iptables
+    echo "Правила сохранены в /etc/sysconfig/iptables"
+elif [ -d /etc/iptables ]; then
+    iptables-save > /etc/iptables/rules.v4
+    echo "Правила сохранены в /etc/iptables/rules.v4"
+else
+    echo "Предупреждение: Не найдена стандартная директория для сохранения правил."
+    echo "Вывод правил iptables-save:"
+    iptables-save
+fi
 
-systemctl enable iptables --now
-systemctl restart iptables
+# Перезапуск сервиса iptables если доступен
+if systemctl list-unit-files | grep -q "^iptables.service"; then
+    systemctl enable iptables --now 2>/dev/null
+    systemctl restart iptables 2>/dev/null
+    echo "Сервис iptables перезапущен"
+fi
 
 echo
 echo "===== NAT таблица ====="
-iptables -t nat -L -n -v
+iptables -t nat -L -n -v --line-numbers
 
 echo
-echo "Готово"
+echo "===== FORWARD цепочка ====="
+iptables -L FORWARD -n -v --line-numbers
+
+echo
+echo "===== Итоговая конфигурация ====="
+echo "WAN интерфейс: $WAN"
+echo "LAN интерфейсы: ${LAN_INTERFACES[*]}"
+echo "Количество LAN сетей: ${#LAN_NETS[@]}"
+
+echo
+echo "Готово!"
