@@ -12,6 +12,29 @@
 # 6. Создание базы данных
 # =========================================================
 
+# =========================================================
+# НАСТРАИВАЕМЫЕ ПАРАМЕТРЫ
+# =========================================================
+# Измените эти значения по своему усмотрению:
+
+DB_NAME="moodledb"              # Имя базы данных
+DB_USER="moodle"                # Имя пользователя базы данных
+DB_PASSWORD="P@ssw0rd"          # Пароль пользователя БД
+ADMIN_PASSWORD="P@ssw0rd"       # Пароль администратора Moodle
+WORKPLACE_NUMBER="1"            # Номер рабочего места (арабская цифра)
+
+# =========================================================
+
+echo "======================================="
+echo "ПАРАМЕТРЫ УСТАНОВКИ:"
+echo "======================================="
+echo "База данных: $DB_NAME"
+echo "Пользователь БД: $DB_USER"
+echo "Пароль БД: $DB_PASSWORD"
+echo "Пароль admin: $ADMIN_PASSWORD"
+echo "Номер рабочего места: $WORKPLACE_NUMBER"
+echo "======================================="
+
 echo "=== Обновление пакетов ==="
 apt-get update
 
@@ -38,15 +61,18 @@ echo "=== Включение служб ==="
 systemctl enable --now httpd2
 systemctl enable --now mariadb
 
+echo "=== Инициализация и перезапуск MariaDB ==="
+mariadb-install-db && systemctl restart mariadb
+
 echo "=== Создание базы данных Moodle ==="
 
 mariadb -u root <<EOF
 
-CREATE DATABASE moodle DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE $DB_NAME DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-CREATE USER 'moodle'@'localhost' IDENTIFIED BY 'P@ssw0rd';
+CREATE USER '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';
 
-GRANT ALL PRIVILEGES ON moodle.* TO 'moodle'@'localhost';
+GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost';
 
 FLUSH PRIVILEGES;
 
@@ -76,6 +102,11 @@ chown -R apache2:apache2 /var/www/moodledata
 echo "=== Удаление стандартной страницы Apache ==="
 
 rm -f /var/www/html/index.html
+
+echo "=== Создание главной страницы с номером рабочего места ==="
+
+echo "$WORKPLACE_NUMBER" > /var/www/html/index.html
+chown apache2:apache2 /var/www/html/index.html
 
 echo "=== Настройка Apache VirtualHost ==="
 
@@ -112,6 +143,17 @@ systemctl restart httpd2
 
 echo "======================================="
 echo "Moodle установлен."
+echo "======================================="
+echo "ОТЧЁТ ПО ПАРАМЕТРАМ:"
+echo "======================================="
+echo "Веб-сервер: Apache (httpd2)"
+echo "СУБД: MariaDB"
+echo "База данных: $DB_NAME"
+echo "Пользователь БД: $DB_USER"
+echo "Пароль БД: $DB_PASSWORD"
+echo "Пароль admin Moodle: $ADMIN_PASSWORD"
+echo "Номер рабочего места: $WORKPLACE_NUMBER"
+echo "======================================="
 echo "Открой в браузере:"
-echo "http://SERVER-IP/install.php"
+echo "http://SERVER-IP/moodle/install.php"
 echo "======================================="
