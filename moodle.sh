@@ -31,7 +31,8 @@ php8.2-soap \
 php8.2-mbstring \
 php8.2-xmlreader \
 php8.2-fileinfo \
-php8.2-sodium
+php8.2-sodium \
+wget
 
 echo "=== Включение служб ==="
 systemctl enable --now httpd2
