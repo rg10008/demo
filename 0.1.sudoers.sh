@@ -69,21 +69,29 @@ echo "Обработка прав root..."
 
 if [ "$ROOT_MODE" = "nopasswd" ]; then
     # Установка NOPASSWD для root
-    # Раскомментировать если закомментирована + добавить NOPASSWD
-    sed -i 's/^#\s*root\s\+ALL=(ALL)\s\+ALL\s*$/root ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
+    
+    # Раскомментировать закомментированную строку без NOPASSWD
+    sed -i -E 's/^#[[:space:]]+root[[:space:]]+ALL=\(ALL\)[[:space:]]+ALL[[:space:]]*$/root ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
+    
     # Заменить обычную строку на NOPASSWD
-    sed -i 's/^root\s\+ALL=(ALL)\s\+ALL\s*$/root ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
-    # Если уже есть NOPASSWD но строка закомментирована
-    sed -i 's/^#\s*root\s\+ALL=(ALL)\s\+NOPASSWD:\s*ALL/root ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
+    sed -i -E 's/^root[[:space:]]+ALL=\(ALL\)[[:space:]]+ALL[[:space:]]*$/root ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
+    
+    # Раскомментировать закомментированную строку с NOPASSWD
+    sed -i -E 's/^#[[:space:]]+root[[:space:]]+ALL=\(ALL\)[[:space:]]+NOPASSWD:[[:space:]]*ALL/root ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
+    
     echo "root: установлен NOPASSWD"
 else
     # Установка обычного режима (с паролем)
-    # Раскомментировать если закомментирована + убрать NOPASSWD
-    sed -i 's/^#\s*root\s\+ALL=(ALL)\s\+ALL\s*$/root ALL=(ALL) ALL/' $SUDOERS
+    
+    # Раскомментировать закомментированную строку без NOPASSWD
+    sed -i -E 's/^#[[:space:]]+root[[:space:]]+ALL=\(ALL\)[[:space:]]+ALL[[:space:]]*$/root ALL=(ALL) ALL/' $SUDOERS
+    
     # Заменить NOPASSWD на обычную строку
-    sed -i 's/^root\s\+ALL=(ALL)\s\+NOPASSWD:\s*ALL$/root ALL=(ALL) ALL/' $SUDOERS
-    # Если закомментирована с NOPASSWD
-    sed -i 's/^#\s*root\s\+ALL=(ALL)\s\+NOPASSWD:\s*ALL/root ALL=(ALL) ALL/' $SUDOERS
+    sed -i -E 's/^root[[:space:]]+ALL=\(ALL\)[[:space:]]+NOPASSWD:[[:space:]]*ALL[[:space:]]*$/root ALL=(ALL) ALL/' $SUDOERS
+    
+    # Раскомментировать закомментированную строку с NOPASSWD и убрать NOPASSWD
+    sed -i -E 's/^#[[:space:]]+root[[:space:]]+ALL=\(ALL\)[[:space:]]+NOPASSWD:[[:space:]]*ALL/root ALL=(ALL) ALL/' $SUDOERS
+    
     echo "root: установлен режим с паролем"
 fi
 
@@ -94,21 +102,29 @@ echo "Обработка прав WHEEL_USERS..."
 
 if [ "$WHEEL_MODE" = "nopasswd" ]; then
     # Установка NOPASSWD для WHEEL_USERS
-    # Раскомментировать если закомментирована + добавить NOPASSWD
-    sed -i 's/^#\s*WHEEL_USERS\s\+ALL=(ALL)\s\+ALL\s*$/WHEEL_USERS ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
+    
+    # Раскомментировать закомментированную строку без NOPASSWD
+    sed -i -E 's/^#[[:space:]]+WHEEL_USERS[[:space:]]+ALL=\(ALL\)[[:space:]]+ALL[[:space:]]*$/WHEEL_USERS ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
+    
     # Заменить обычную строку на NOPASSWD
-    sed -i 's/^WHEEL_USERS\s\+ALL=(ALL)\s\+ALL\s*$/WHEEL_USERS ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
-    # Если уже есть NOPASSWD но строка закомментирована
-    sed -i 's/^#\s*WHEEL_USERS\s\+ALL=(ALL)\s\+NOPASSWD:\s*ALL$/WHEEL_USERS ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
+    sed -i -E 's/^WHEEL_USERS[[:space:]]+ALL=\(ALL\)[[:space:]]+ALL[[:space:]]*$/WHEEL_USERS ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
+    
+    # Раскомментировать закомментированную строку с NOPASSWD
+    sed -i -E 's/^#[[:space:]]+WHEEL_USERS[[:space:]]+ALL=\(ALL\)[[:space:]]+NOPASSWD:[[:space:]]*ALL$/WHEEL_USERS ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
+    
     echo "WHEEL_USERS: установлен NOPASSWD"
 else
     # Установка обычного режима (с паролем)
-    # Раскомментировать если закомментирована + без NOPASSWD
-    sed -i 's/^#\s*WHEEL_USERS\s\+ALL=(ALL)\s\+ALL\s*$/WHEEL_USERS ALL=(ALL) ALL/' $SUDOERS
+    
+    # Раскомментировать закомментированную строку без NOPASSWD
+    sed -i -E 's/^#[[:space:]]+WHEEL_USERS[[:space:]]+ALL=\(ALL\)[[:space:]]+ALL[[:space:]]*$/WHEEL_USERS ALL=(ALL) ALL/' $SUDOERS
+    
     # Заменить NOPASSWD на обычную строку
-    sed -i 's/^WHEEL_USERS\s\+ALL=(ALL)\s\+NOPASSWD:\s*ALL$/WHEEL_USERS ALL=(ALL) ALL/' $SUDOERS
-    # Если закомментирована с NOPASSWD
-    sed -i 's/^#\s*WHEEL_USERS\s\+ALL=(ALL)\s\+NOPASSWD:\s*ALL$/WHEEL_USERS ALL=(ALL) ALL/' $SUDOERS
+    sed -i -E 's/^WHEEL_USERS[[:space:]]+ALL=\(ALL\)[[:space:]]+NOPASSWD:[[:space:]]*ALL[[:space:]]*$/WHEEL_USERS ALL=(ALL) ALL/' $SUDOERS
+    
+    # Раскомментировать закомментированную строку с NOPASSWD и убрать NOPASSWD
+    sed -i -E 's/^#[[:space:]]+WHEEL_USERS[[:space:]]+ALL=\(ALL\)[[:space:]]+NOPASSWD:[[:space:]]*ALL$/WHEEL_USERS ALL=(ALL) ALL/' $SUDOERS
+    
     echo "WHEEL_USERS: установлен режим с паролем"
 fi
 
@@ -118,6 +134,6 @@ echo "Готово!"
 echo "========================================="
 echo ""
 echo "Текущие настройки:"
-grep -E '^root\s+ALL=\(ALL\)' $SUDOERS 2>/dev/null && echo ""
-grep -E '^WHEEL_USERS\s+ALL=\(ALL\)' $SUDOERS 2>/dev/null && echo ""
+grep -E '^root[[:space:]]+ALL=\(ALL\)' $SUDOERS 2>/dev/null && echo ""
+grep -E '^WHEEL_USERS[[:space:]]+ALL=\(ALL\)' $SUDOERS 2>/dev/null && echo ""
 echo "Резервная копия: ${SUDOERS}.bak"
