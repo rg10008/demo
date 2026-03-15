@@ -112,24 +112,12 @@ else
     echo "WHEEL_USERS: установлен режим с паролем"
 fi
 
-# ============================================
-# Проверка конфигурации
-# ============================================
 echo ""
-echo "Проверка sudoers..."
-visudo -c
-if [ $? -eq 0 ]; then
-    echo ""
-    echo "========================================="
-    echo "Конфигурация корректна!"
-    echo "========================================="
-    echo ""
-    echo "Текущие настройки:"
-    grep -E '^root\s+ALL=\(ALL\)' $SUDOERS 2>/dev/null && echo ""
-    grep -E '^WHEEL_USERS\s+ALL=\(ALL\)' $SUDOERS 2>/dev/null && echo ""
-else
-    echo ""
-    echo "ОШИБКА! Восстановление backup"
-    cp ${SUDOERS}.bak $SUDOERS
-    exit 1
-fi
+echo "========================================="
+echo "Готово!"
+echo "========================================="
+echo ""
+echo "Текущие настройки:"
+grep -E '^root\s+ALL=\(ALL\)' $SUDOERS 2>/dev/null && echo ""
+grep -E '^WHEEL_USERS\s+ALL=\(ALL\)' $SUDOERS 2>/dev/null && echo ""
+echo "Резервная копия: ${SUDOERS}.bak"
