@@ -64,36 +64,81 @@ cp $SUDOERS ${SUDOERS}.bak
 
 # ============================================
 # Обработка ROOT
+# Поддерживаем форматы: (ALL), (ALL:ALL)
 # ============================================
 echo "Обработка прав root..."
 
 if [ "$ROOT_MODE" = "nopasswd" ]; then
-    # Используем perl для надёжной работы с regex
+    # Установка NOPASSWD для root
+    
+    # Формат (ALL:ALL) - закомментированная строка
+    perl -i -pe 's/^#\s*root\s+ALL=\(ALL:ALL\)\s+NOPASSWD:\s*ALL$/root ALL=(ALL:ALL) NOPASSWD: ALL/' $SUDOERS
+    perl -i -pe 's/^#\s*root\s+ALL=\(ALL:ALL\)\s+ALL$/root ALL=(ALL:ALL) NOPASSWD: ALL/' $SUDOERS
+    
+    # Формат (ALL) - закомментированная строка
     perl -i -pe 's/^#\s*root\s+ALL=\(ALL\)\s+NOPASSWD:\s*ALL$/root ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
     perl -i -pe 's/^#\s*root\s+ALL=\(ALL\)\s+ALL$/root ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
+    
+    # Активные строки
+    perl -i -pe 's/^root\s+ALL=\(ALL:ALL\)\s+ALL$/root ALL=(ALL:ALL) NOPASSWD: ALL/' $SUDOERS
     perl -i -pe 's/^root\s+ALL=\(ALL\)\s+ALL$/root ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
+    
     echo "root: установлен NOPASSWD"
 else
+    # Установка обычного режима (с паролем)
+    
+    # Формат (ALL:ALL)
+    perl -i -pe 's/^#\s*root\s+ALL=\(ALL:ALL\)\s+NOPASSWD:\s*ALL$/root ALL=(ALL:ALL) ALL/' $SUDOERS
+    perl -i -pe 's/^#\s*root\s+ALL=\(ALL:ALL\)\s+ALL$/root ALL=(ALL:ALL) ALL/' $SUDOERS
+    
+    # Формат (ALL)
     perl -i -pe 's/^#\s*root\s+ALL=\(ALL\)\s+NOPASSWD:\s*ALL$/root ALL=(ALL) ALL/' $SUDOERS
     perl -i -pe 's/^#\s*root\s+ALL=\(ALL\)\s+ALL$/root ALL=(ALL) ALL/' $SUDOERS
+    
+    # Активные строки с NOPASSWD
+    perl -i -pe 's/^root\s+ALL=\(ALL:ALL\)\s+NOPASSWD:\s*ALL$/root ALL=(ALL:ALL) ALL/' $SUDOERS
     perl -i -pe 's/^root\s+ALL=\(ALL\)\s+NOPASSWD:\s*ALL$/root ALL=(ALL) ALL/' $SUDOERS
+    
     echo "root: установлен режим с паролем"
 fi
 
 # ============================================
 # Обработка WHEEL_USERS
+# Поддерживаем форматы: (ALL), (ALL:ALL)
 # ============================================
 echo "Обработка прав WHEEL_USERS..."
 
 if [ "$WHEEL_MODE" = "nopasswd" ]; then
+    # Установка NOPASSWD для WHEEL_USERS
+    
+    # Формат (ALL:ALL) - закомментированная строка
+    perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL:ALL\)\s+NOPASSWD:\s*ALL$/WHEEL_USERS ALL=(ALL:ALL) NOPASSWD: ALL/' $SUDOERS
+    perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL:ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL:ALL) NOPASSWD: ALL/' $SUDOERS
+    
+    # Формат (ALL) - закомментированная строка
     perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL\)\s+NOPASSWD:\s*ALL$/WHEEL_USERS ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
     perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
+    
+    # Активные строки
+    perl -i -pe 's/^WHEEL_USERS\s+ALL=\(ALL:ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL:ALL) NOPASSWD: ALL/' $SUDOERS
     perl -i -pe 's/^WHEEL_USERS\s+ALL=\(ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
+    
     echo "WHEEL_USERS: установлен NOPASSWD"
 else
+    # Установка обычного режима (с паролем)
+    
+    # Формат (ALL:ALL)
+    perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL:ALL\)\s+NOPASSWD:\s*ALL$/WHEEL_USERS ALL=(ALL:ALL) ALL/' $SUDOERS
+    perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL:ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL:ALL) ALL/' $SUDOERS
+    
+    # Формат (ALL)
     perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL\)\s+NOPASSWD:\s*ALL$/WHEEL_USERS ALL=(ALL) ALL/' $SUDOERS
     perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL) ALL/' $SUDOERS
+    
+    # Активные строки с NOPASSWD
+    perl -i -pe 's/^WHEEL_USERS\s+ALL=\(ALL:ALL\)\s+NOPASSWD:\s*ALL$/WHEEL_USERS ALL=(ALL:ALL) ALL/' $SUDOERS
     perl -i -pe 's/^WHEEL_USERS\s+ALL=\(ALL\)\s+NOPASSWD:\s*ALL$/WHEEL_USERS ALL=(ALL) ALL/' $SUDOERS
+    
     echo "WHEEL_USERS: установлен режим с паролем"
 fi
 
@@ -103,6 +148,6 @@ echo "Готово!"
 echo "========================================="
 echo ""
 echo "Текущие настройки:"
-grep -E '^root\s+ALL=\(ALL\)' $SUDOERS 2>/dev/null && echo ""
-grep -E '^WHEEL_USERS\s+ALL=\(ALL\)' $SUDOERS 2>/dev/null && echo ""
+grep -E '^root\s+ALL=\(ALL' $SUDOERS 2>/dev/null && echo ""
+grep -E '^WHEEL_USERS\s+ALL=\(ALL' $SUDOERS 2>/dev/null && echo ""
 echo "Резервная копия: ${SUDOERS}.bak"
