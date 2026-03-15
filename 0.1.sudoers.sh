@@ -64,38 +64,23 @@ cp $SUDOERS ${SUDOERS}.bak
 
 # ============================================
 # Обработка ROOT
-# Поддерживаем форматы: (ALL), (ALL:ALL)
 # ============================================
 echo "Обработка прав root..."
 
 if [ "$ROOT_MODE" = "nopasswd" ]; then
-    # Установка NOPASSWD для root
+    # Сначала раскомментируем первую закомментированную строку
+    perl -i -pe 's/^#\s*root\s+ALL=\(ALL:ALL\)\s+ALL$/root ALL=(ALL:ALL) NOPASSWD: ALL/ unless $done_root++' $SUDOERS
+    perl -i -pe 's/^#\s*root\s+ALL=\(ALL\)\s+ALL$/root ALL=(ALL) NOPASSWD: ALL/ unless $done_root2++' $SUDOERS
     
-    # Формат (ALL:ALL) - закомментированная строка
-    perl -i -pe 's/^#\s*root\s+ALL=\(ALL:ALL\)\s+NOPASSWD:\s*ALL$/root ALL=(ALL:ALL) NOPASSWD: ALL/' $SUDOERS
-    perl -i -pe 's/^#\s*root\s+ALL=\(ALL:ALL\)\s+ALL$/root ALL=(ALL:ALL) NOPASSWD: ALL/' $SUDOERS
-    
-    # Формат (ALL) - закомментированная строка
-    perl -i -pe 's/^#\s*root\s+ALL=\(ALL\)\s+NOPASSWD:\s*ALL$/root ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
-    perl -i -pe 's/^#\s*root\s+ALL=\(ALL\)\s+ALL$/root ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
-    
-    # Активные строки
+    # Затем меняем активные строки
     perl -i -pe 's/^root\s+ALL=\(ALL:ALL\)\s+ALL$/root ALL=(ALL:ALL) NOPASSWD: ALL/' $SUDOERS
     perl -i -pe 's/^root\s+ALL=\(ALL\)\s+ALL$/root ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
     
     echo "root: установлен NOPASSWD"
 else
-    # Установка обычного режима (с паролем)
+    perl -i -pe 's/^#\s*root\s+ALL=\(ALL:ALL\)\s+ALL$/root ALL=(ALL:ALL) ALL/ unless $done_root++' $SUDOERS
+    perl -i -pe 's/^#\s*root\s+ALL=\(ALL\)\s+ALL$/root ALL=(ALL) ALL/ unless $done_root2++' $SUDOERS
     
-    # Формат (ALL:ALL)
-    perl -i -pe 's/^#\s*root\s+ALL=\(ALL:ALL\)\s+NOPASSWD:\s*ALL$/root ALL=(ALL:ALL) ALL/' $SUDOERS
-    perl -i -pe 's/^#\s*root\s+ALL=\(ALL:ALL\)\s+ALL$/root ALL=(ALL:ALL) ALL/' $SUDOERS
-    
-    # Формат (ALL)
-    perl -i -pe 's/^#\s*root\s+ALL=\(ALL\)\s+NOPASSWD:\s*ALL$/root ALL=(ALL) ALL/' $SUDOERS
-    perl -i -pe 's/^#\s*root\s+ALL=\(ALL\)\s+ALL$/root ALL=(ALL) ALL/' $SUDOERS
-    
-    # Активные строки с NOPASSWD
     perl -i -pe 's/^root\s+ALL=\(ALL:ALL\)\s+NOPASSWD:\s*ALL$/root ALL=(ALL:ALL) ALL/' $SUDOERS
     perl -i -pe 's/^root\s+ALL=\(ALL\)\s+NOPASSWD:\s*ALL$/root ALL=(ALL) ALL/' $SUDOERS
     
@@ -103,39 +88,38 @@ else
 fi
 
 # ============================================
-# Обработка WHEEL_USERS
-# Поддерживаем форматы: (ALL), (ALL:ALL)
+# Обработка WHEEL_USERS (только первая строка)
 # ============================================
 echo "Обработка прав WHEEL_USERS..."
 
+# Проверяем есть ли уже активная строка WHEEL_USERS
+if grep -qE '^WHEEL_USERS\s+ALL=\(ALL' $SUDOERS; then
+    echo "Найдена активная строка WHEEL_USERS - пропускаем раскомментирование"
+    ACTIVE_WHEEL=1
+else
+    ACTIVE_WHEEL=0
+fi
+
 if [ "$WHEEL_MODE" = "nopasswd" ]; then
-    # Установка NOPASSWD для WHEEL_USERS
+    if [ "$ACTIVE_WHEEL" -eq 0 ]; then
+        # Раскомментируем ТОЛЬКО первую закомментированную строку
+        perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL:ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL:ALL) NOPASSWD: ALL/ unless $done_wheel++' $SUDOERS
+        perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL) NOPASSWD: ALL/ unless $done_wheel2++' $SUDOERS
+    fi
     
-    # Формат (ALL:ALL) - закомментированная строка
-    perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL:ALL\)\s+NOPASSWD:\s*ALL$/WHEEL_USERS ALL=(ALL:ALL) NOPASSWD: ALL/' $SUDOERS
-    perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL:ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL:ALL) NOPASSWD: ALL/' $SUDOERS
-    
-    # Формат (ALL) - закомментированная строка
-    perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL\)\s+NOPASSWD:\s*ALL$/WHEEL_USERS ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
-    perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
-    
-    # Активные строки
+    # Меняем активные строки
     perl -i -pe 's/^WHEEL_USERS\s+ALL=\(ALL:ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL:ALL) NOPASSWD: ALL/' $SUDOERS
     perl -i -pe 's/^WHEEL_USERS\s+ALL=\(ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
     
     echo "WHEEL_USERS: установлен NOPASSWD"
 else
-    # Установка обычного режима (с паролем)
+    if [ "$ACTIVE_WHEEL" -eq 0 ]; then
+        # Раскомментируем ТОЛЬКО первую закомментированную строку
+        perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL:ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL:ALL) ALL/ unless $done_wheel++' $SUDOERS
+        perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL) ALL/ unless $done_wheel2++' $SUDOERS
+    fi
     
-    # Формат (ALL:ALL)
-    perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL:ALL\)\s+NOPASSWD:\s*ALL$/WHEEL_USERS ALL=(ALL:ALL) ALL/' $SUDOERS
-    perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL:ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL:ALL) ALL/' $SUDOERS
-    
-    # Формат (ALL)
-    perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL\)\s+NOPASSWD:\s*ALL$/WHEEL_USERS ALL=(ALL) ALL/' $SUDOERS
-    perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL) ALL/' $SUDOERS
-    
-    # Активные строки с NOPASSWD
+    # Меняем активные строки
     perl -i -pe 's/^WHEEL_USERS\s+ALL=\(ALL:ALL\)\s+NOPASSWD:\s*ALL$/WHEEL_USERS ALL=(ALL:ALL) ALL/' $SUDOERS
     perl -i -pe 's/^WHEEL_USERS\s+ALL=\(ALL\)\s+NOPASSWD:\s*ALL$/WHEEL_USERS ALL=(ALL) ALL/' $SUDOERS
     
@@ -150,4 +134,8 @@ echo ""
 echo "Текущие настройки:"
 grep -E '^root\s+ALL=\(ALL' $SUDOERS 2>/dev/null && echo ""
 grep -E '^WHEEL_USERS\s+ALL=\(ALL' $SUDOERS 2>/dev/null && echo ""
+echo ""
+echo "Закомментированные WHEEL_USERS (не изменены):"
+grep -nE '^#\s*WHEEL_USERS' $SUDOERS 2>/dev/null
+echo ""
 echo "Резервная копия: ${SUDOERS}.bak"
