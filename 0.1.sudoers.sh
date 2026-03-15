@@ -67,62 +67,67 @@ cp $SUDOERS ${SUDOERS}.bak
 # ============================================
 echo "Обработка прав root..."
 
+# Проверяем есть ли активная строка root
+if grep -qE '^root\s+ALL=\(ALL' $SUDOERS; then
+    echo "Найдена активная строка root"
+    ACTIVE_ROOT=1
+else
+    echo "Активная строка root не найдена, раскомментируем..."
+    ACTIVE_ROOT=0
+    
+    if [ "$ROOT_MODE" = "nopasswd" ]; then
+        # Раскомментируем первую закомментированную строку root с NOPASSWD
+        sed -i '0,/^#[[:space:]]*root[[:space:]]*ALL=(ALL:ALL)[[:space:]]*ALL/s/^#[[:space:]]*root[[:space:]]*ALL=(ALL:ALL)[[:space:]]*ALL/root ALL=(ALL:ALL) NOPASSWD: ALL/' $SUDOERS
+        sed -i '0,/^#[[:space:]]*root[[:space:]]*ALL=(ALL)[[:space:]]*ALL/s/^#[[:space:]]*root[[:space:]]*ALL=(ALL)[[:space:]]*ALL/root ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
+    else
+        # Раскомментируем первую закомментированную строку root без NOPASSWD
+        sed -i '0,/^#[[:space:]]*root[[:space:]]*ALL=(ALL:ALL)[[:space:]]*ALL/s/^#[[:space:]]*root[[:space:]]*ALL=(ALL:ALL)[[:space:]]*ALL/root ALL=(ALL:ALL) ALL/' $SUDOERS
+        sed -i '0,/^#[[:space:]]*root[[:space:]]*ALL=(ALL)[[:space:]]*ALL/s/^#[[:space:]]*root[[:space:]]*ALL=(ALL)[[:space:]]*ALL/root ALL=(ALL) ALL/' $SUDOERS
+    fi
+fi
+
+# Меняем активные строки
 if [ "$ROOT_MODE" = "nopasswd" ]; then
-    # Сначала раскомментируем первую закомментированную строку
-    perl -i -pe 's/^#\s*root\s+ALL=\(ALL:ALL\)\s+ALL$/root ALL=(ALL:ALL) NOPASSWD: ALL/ unless $done_root++' $SUDOERS
-    perl -i -pe 's/^#\s*root\s+ALL=\(ALL\)\s+ALL$/root ALL=(ALL) NOPASSWD: ALL/ unless $done_root2++' $SUDOERS
-    
-    # Затем меняем активные строки
-    perl -i -pe 's/^root\s+ALL=\(ALL:ALL\)\s+ALL$/root ALL=(ALL:ALL) NOPASSWD: ALL/' $SUDOERS
-    perl -i -pe 's/^root\s+ALL=\(ALL\)\s+ALL$/root ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
-    
+    sed -i 's/^root[[:space:]]*ALL=(ALL:ALL)[[:space:]]*ALL$/root ALL=(ALL:ALL) NOPASSWD: ALL/' $SUDOERS
+    sed -i 's/^root[[:space:]]*ALL=(ALL)[[:space:]]*ALL$/root ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
     echo "root: установлен NOPASSWD"
 else
-    perl -i -pe 's/^#\s*root\s+ALL=\(ALL:ALL\)\s+ALL$/root ALL=(ALL:ALL) ALL/ unless $done_root++' $SUDOERS
-    perl -i -pe 's/^#\s*root\s+ALL=\(ALL\)\s+ALL$/root ALL=(ALL) ALL/ unless $done_root2++' $SUDOERS
-    
-    perl -i -pe 's/^root\s+ALL=\(ALL:ALL\)\s+NOPASSWD:\s*ALL$/root ALL=(ALL:ALL) ALL/' $SUDOERS
-    perl -i -pe 's/^root\s+ALL=\(ALL\)\s+NOPASSWD:\s*ALL$/root ALL=(ALL) ALL/' $SUDOERS
-    
+    sed -i 's/^root[[:space:]]*ALL=(ALL:ALL)[[:space:]]*NOPASSWD:[[:space:]]*ALL$/root ALL=(ALL:ALL) ALL/' $SUDOERS
+    sed -i 's/^root[[:space:]]*ALL=(ALL)[[:space:]]*NOPASSWD:[[:space:]]*ALL$/root ALL=(ALL) ALL/' $SUDOERS
     echo "root: установлен режим с паролем"
 fi
 
 # ============================================
-# Обработка WHEEL_USERS (только первая строка)
+# Обработка WHEEL_USERS
 # ============================================
 echo "Обработка прав WHEEL_USERS..."
 
-# Проверяем есть ли уже активная строка WHEEL_USERS
-if grep -qE '^WHEEL_USERS\s+ALL=\(ALL' $SUDOERS; then
-    echo "Найдена активная строка WHEEL_USERS - пропускаем раскомментирование"
+# Проверяем есть ли активная строка WHEEL_USERS
+if grep -qE '^WHEEL_USERS[[:space:]]+ALL=\(ALL' $SUDOERS; then
+    echo "Найдена активная строка WHEEL_USERS"
     ACTIVE_WHEEL=1
 else
+    echo "Активная строка WHEEL_USERS не найдена, раскомментируем..."
     ACTIVE_WHEEL=0
+    
+    if [ "$WHEEL_MODE" = "nopasswd" ]; then
+        # Раскомментируем ТОЛЬКО первую закомментированную строку WHEEL_USERS
+        sed -i '0,/^#[[:space:]]*WHEEL_USERS[[:space:]]*ALL=(ALL:ALL)[[:space:]]*ALL/s/^#[[:space:]]*WHEEL_USERS[[:space:]]*ALL=(ALL:ALL)[[:space:]]*ALL/WHEEL_USERS ALL=(ALL:ALL) NOPASSWD: ALL/' $SUDOERS
+        sed -i '0,/^#[[:space:]]*WHEEL_USERS[[:space:]]*ALL=(ALL)[[:space:]]*ALL/s/^#[[:space:]]*WHEEL_USERS[[:space:]]*ALL=(ALL)[[:space:]]*ALL/WHEEL_USERS ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
+    else
+        sed -i '0,/^#[[:space:]]*WHEEL_USERS[[:space:]]*ALL=(ALL:ALL)[[:space:]]*ALL/s/^#[[:space:]]*WHEEL_USERS[[:space:]]*ALL=(ALL:ALL)[[:space:]]*ALL/WHEEL_USERS ALL=(ALL:ALL) ALL/' $SUDOERS
+        sed -i '0,/^#[[:space:]]*WHEEL_USERS[[:space:]]*ALL=(ALL)[[:space:]]*ALL/s/^#[[:space:]]*WHEEL_USERS[[:space:]]*ALL=(ALL)[[:space:]]*ALL/WHEEL_USERS ALL=(ALL) ALL/' $SUDOERS
+    fi
 fi
 
+# Меняем активные строки
 if [ "$WHEEL_MODE" = "nopasswd" ]; then
-    if [ "$ACTIVE_WHEEL" -eq 0 ]; then
-        # Раскомментируем ТОЛЬКО первую закомментированную строку
-        perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL:ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL:ALL) NOPASSWD: ALL/ unless $done_wheel++' $SUDOERS
-        perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL) NOPASSWD: ALL/ unless $done_wheel2++' $SUDOERS
-    fi
-    
-    # Меняем активные строки
-    perl -i -pe 's/^WHEEL_USERS\s+ALL=\(ALL:ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL:ALL) NOPASSWD: ALL/' $SUDOERS
-    perl -i -pe 's/^WHEEL_USERS\s+ALL=\(ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
-    
+    sed -i 's/^WHEEL_USERS[[:space:]]*ALL=(ALL:ALL)[[:space:]]*ALL$/WHEEL_USERS ALL=(ALL:ALL) NOPASSWD: ALL/' $SUDOERS
+    sed -i 's/^WHEEL_USERS[[:space:]]*ALL=(ALL)[[:space:]]*ALL$/WHEEL_USERS ALL=(ALL) NOPASSWD: ALL/' $SUDOERS
     echo "WHEEL_USERS: установлен NOPASSWD"
 else
-    if [ "$ACTIVE_WHEEL" -eq 0 ]; then
-        # Раскомментируем ТОЛЬКО первую закомментированную строку
-        perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL:ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL:ALL) ALL/ unless $done_wheel++' $SUDOERS
-        perl -i -pe 's/^#\s*WHEEL_USERS\s+ALL=\(ALL\)\s+ALL$/WHEEL_USERS ALL=(ALL) ALL/ unless $done_wheel2++' $SUDOERS
-    fi
-    
-    # Меняем активные строки
-    perl -i -pe 's/^WHEEL_USERS\s+ALL=\(ALL:ALL\)\s+NOPASSWD:\s*ALL$/WHEEL_USERS ALL=(ALL:ALL) ALL/' $SUDOERS
-    perl -i -pe 's/^WHEEL_USERS\s+ALL=\(ALL\)\s+NOPASSWD:\s*ALL$/WHEEL_USERS ALL=(ALL) ALL/' $SUDOERS
-    
+    sed -i 's/^WHEEL_USERS[[:space:]]*ALL=(ALL:ALL)[[:space:]]*NOPASSWD:[[:space:]]*ALL$/WHEEL_USERS ALL=(ALL:ALL) ALL/' $SUDOERS
+    sed -i 's/^WHEEL_USERS[[:space:]]*ALL=(ALL)[[:space:]]*NOPASSWD:[[:space:]]*ALL$/WHEEL_USERS ALL=(ALL) ALL/' $SUDOERS
     echo "WHEEL_USERS: установлен режим с паролем"
 fi
 
@@ -132,10 +137,7 @@ echo "Готово!"
 echo "========================================="
 echo ""
 echo "Текущие настройки:"
-grep -E '^root\s+ALL=\(ALL' $SUDOERS 2>/dev/null && echo ""
-grep -E '^WHEEL_USERS\s+ALL=\(ALL' $SUDOERS 2>/dev/null && echo ""
-echo ""
-echo "Закомментированные WHEEL_USERS (не изменены):"
-grep -nE '^#\s*WHEEL_USERS' $SUDOERS 2>/dev/null
+grep -E '^root[[:space:]]+ALL=\(ALL' $SUDOERS 2>/dev/null && echo ""
+grep -E '^WHEEL_USERS[[:space:]]+ALL=\(ALL' $SUDOERS 2>/dev/null && echo ""
 echo ""
 echo "Резервная копия: ${SUDOERS}.bak"
