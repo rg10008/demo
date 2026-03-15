@@ -133,9 +133,10 @@ echo "=== Настройка PHP для Moodle ==="
 
 PHPINI="/etc/php/8.2/apache2-mod_php/php.ini"
 
-sed -i 's/^max_input_vars.*/max_input_vars = 5000/' $PHPINI
-sed -i 's/^upload_max_filesize.*/upload_max_filesize = 100M/' $PHPINI
-sed -i 's/^post_max_size.*/post_max_size = 100M/' $PHPINI
+# Раскомментируем и устанавливаем значения (убираем ';' в начале строк)
+sed -i 's/^[;[:space:]]*max_input_vars.*/max_input_vars = 5000/' $PHPINI
+sed -i 's/^[;[:space:]]*upload_max_filesize.*/upload_max_filesize = 100M/' $PHPINI
+sed -i 's/^[;[:space:]]*post_max_size.*/post_max_size = 100M/' $PHPINI
 
 echo "=== Перезапуск Apache ==="
 
