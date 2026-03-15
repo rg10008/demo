@@ -5,6 +5,12 @@ echo "1 - Server (HQ-SRV / BR-SRV)"
 echo "2 - Router (HQ-RTR / BR-RTR)"
 read -p "Введите номер: " DEVICE
 
+# Запрос данных пользователя
+read -p "Введите имя пользователя: " INPUT_USERNAME
+read -s -p "Введите пароль: " INPUT_PASSWORD
+echo
+read -p "Введите идентификатор (UID, можно пропустить нажав Enter): " INPUT_UID
+
 create_user () {
 
 USERNAME=$1
@@ -51,12 +57,14 @@ case $DEVICE in
 
 1)
 echo "Настройка Server..."
-create_user "sshuser" "P@ssw0rd" "1010"
+# Используем введённые данные пользователя
+create_user "$INPUT_USERNAME" "$INPUT_PASSWORD" "$INPUT_UID"
 ;;
 
 2)
 echo "Настройка Router (Linux)..."
-create_user "net_admin" "P@$$word"
+# Используем введённые данные пользователя
+create_user "$INPUT_USERNAME" "$INPUT_PASSWORD" "$INPUT_UID"
 ;;
 
 *)
