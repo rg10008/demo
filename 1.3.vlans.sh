@@ -1,11 +1,12 @@
-#!/bin/bash
+#!/bin/sh
 
 # ==============================================================================
 # Скрипт настройки VLAN для ALT Linux (Интерактивный выбор интерфейса и кол-ва VLAN)
+# POSIX sh compatible
 # ==============================================================================
 
 # Проверка прав root
-if [ "$EUID" -ne 0 ]; then 
+if [ "$(id -u)" -ne 0 ]; then 
   echo "Пожалуйста, запустите скрипт от имени root (sudo ./setup_vlans.sh)"
   exit 1
 fi
@@ -28,22 +29,27 @@ echo "========================================================"
 echo ""
 
 # Получаем список интерфейсов, исключая lo, docker, veth, virbr, sit и др.
-mapfile -t IFACES < <(ip -o link show | awk -F': ' '{print $2}' | grep -v -E "^(lo|docker|veth|virbr|sit|br-|flannel|cni|tun|tap|bond)")
+# Сохраняем во временный файл для POSIX совместимости
+IFACES_FILE=$(mktemp)
+ip -o link show | awk -F': ' '{print $2}' | grep -v -E "^(lo|docker|veth|virbr|sit|br-|flannel|cni|tun|tap|bond)" > "$IFACES_FILE"
 
-if [ ${#IFACES[@]} -eq 0 ]; then
+# Подсчитываем количество интерфейсов
+IFACE_COUNT=$(wc -l < "$IFACES_FILE")
+
+if [ "$IFACE_COUNT" -eq 0 ]; then
     echo "Ошибка: Не найдено подходящих сетевых интерфейсов."
+    rm -f "$IFACES_FILE"
     exit 1
 fi
 
 # Выводим список интерфейсов с детальной информацией
 echo "Обнаружены следующие сетевые интерфейсы:"
 echo ""
-printf "  %-4s %-16s %-10s %-20s %-10s\n" "№" "Интерфейс" "Статус" "MAC-адрес" "Скорость"
-echo "  -------------------------------------------------------------------"
+printf "  %-4s %-16s %-10s %-20s\n" "№" "Интерфейс" "Статус" "MAC-адрес"
+echo "  --------------------------------------------------------"
 
-for i in "${!IFACES[@]}"; do
-    IFACE_NAME="${IFACES[$i]}"
-    
+i=1
+while IFS= read -r IFACE_NAME; do
     # Получаем статус UP/DOWN
     STATUS=$(ip -o link show "$IFACE_NAME" | awk '{print $9}')
     [ -z "$STATUS" ] && STATUS="UNKNOWN"
@@ -52,25 +58,15 @@ for i in "${!IFACES[@]}"; do
     MAC=$(ip -o link show "$IFACE_NAME" | awk '{print $17}')
     [ -z "$MAC" ] && MAC="N/A"
     
-    # Пытаемся получить скорость (если доступно)
-    SPEED=""
-    if [ -f "/sys/class/net/${IFACE_NAME}/speed" ]; then
-        SPEED=$(cat "/sys/class/net/${IFACE_NAME}/speed" 2>/dev/null)
-        if [ -n "$SPEED" ] && [ "$SPEED" != "-1" ]; then
-            SPEED="${SPEED} Mb/s"
-        else
-            SPEED=""
-        fi
-    fi
-    [ -z "$SPEED" ] && SPEED="N/A"
-    
-    # Отмечаем активные интерфейсы
+    # Вывод с цветом (если терминал поддерживает)
     if [ "$STATUS" = "UP" ]; then
-        printf "  %-4s %-16s \033[32m%-10s\033[0m %-20s %-10s\n" "[$((i+1))]" "$IFACE_NAME" "$STATUS" "$MAC" "$SPEED"
+        printf "  [%-2d] %-16s \033[32m%-10s\033[0m %-20s\n" "$i" "$IFACE_NAME" "$STATUS" "$MAC"
     else
-        printf "  %-4s %-16s \033[31m%-10s\033[0m %-20s %-10s\n" "[$((i+1))]" "$IFACE_NAME" "$STATUS" "$MAC" "$SPEED"
+        printf "  [%-2d] %-16s \033[31m%-10s\033[0m %-20s\n" "$i" "$IFACE_NAME" "$STATUS" "$MAC"
     fi
-done
+    
+    i=$((i + 1))
+done < "$IFACES_FILE"
 
 echo ""
 echo "  \033[32mUP\033[0m = интерфейс активен, \033[31mDOWN\033[0m = интерфейс неактивен"
@@ -78,16 +74,29 @@ echo ""
 
 # Запрос выбора интерфейса
 while true; do
-    read -p "Введите номер интерфейса для настройки VLAN [1]: " SELECTION
+    printf "Введите номер интерфейса для настройки VLAN [1]: "
+    read -r SELECTION
     SELECTION=${SELECTION:-1}
     
-    if [[ "$SELECTION" =~ ^[0-9]+$ ]] && [ "$SELECTION" -ge 1 ] && [ "$SELECTION" -le ${#IFACES[@]} ]; then
-        PHYS_IFACE="${IFACES[$((SELECTION-1))]}"
+    # Проверяем, что это число
+    case "$SELECTION" in
+        ''|*[!0-9]*)
+            echo "Неверный ввод. Пожалуйста, введите число от 1 до $IFACE_COUNT."
+            continue
+            ;;
+    esac
+    
+    if [ "$SELECTION" -ge 1 ] && [ "$SELECTION" -le "$IFACE_COUNT" ]; then
+        # Получаем имя выбранного интерфейса
+        PHYS_IFACE=$(sed -n "${SELECTION}p" "$IFACES_FILE")
         break
     else
-        echo "Неверный ввод. Пожалуйста, введите число от 1 до ${#IFACES[@]}."
+        echo "Неверный ввод. Пожалуйста, введите число от 1 до $IFACE_COUNT."
     fi
 done
+
+# Удаляем временный файл
+rm -f "$IFACES_FILE"
 
 echo ""
 echo "========================================================"
@@ -100,29 +109,31 @@ echo "========================================================"
 
 # Расчет маски по количеству хостов
 calculate_cidr() {
-    local hosts=$1
-    local bits=1
-    while (( (1 << bits) - 2 < hosts )); do
-        ((bits++))
+    hosts=$1
+    bits=1
+    while [ $(( (1 << bits) - 2 )) -lt "$hosts" ]; do
+        bits=$((bits + 1))
     done
     echo $((32 - bits))
 }
 
 # Создание конфига VLAN
 create_vlan_config() {
-    local vlan_name=$1      # Имя/Описание
-    local vlan_id=$2        # Номер VLAN
-    local iface=$3          # Физический интерфейс
-    local network_octet=$4  # Третий октет
-    local hosts=$5          # Кол-во хостов
-    local base_net=$6       # Базовая сеть (192.168)
+    vlan_name=$1       # Имя/Описание
+    vlan_id=$2         # Номер VLAN
+    iface=$3           # Физический интерфейс
+    network_octet=$4   # Третий октет
+    hosts=$5           # Кол-во хостов
+    base_net=$6        # Базовая сеть (192.168)
     
-    local cidr=$(calculate_cidr $hosts)
-    local vlan_iface_name="${iface}.${vlan_id}"
-    local vlan_dir="/etc/net/ifaces/${vlan_iface_name}"
-    local network_ip="${base_net}.${network_octet}.0"
-    local ip_address="${network_ip%.*}.2/$cidr" # IP сервера (.2)
-    local full_network="${network_ip}/${cidr}"
+    cidr=$(calculate_cidr "$hosts")
+    vlan_iface_name="${iface}.${vlan_id}"
+    vlan_dir="/etc/net/ifaces/${vlan_iface_name}"
+    network_ip="${base_net}.${network_octet}.0"
+    
+    # Формируем IP адрес (заменяем последний октет на .2)
+    ip_address=$(echo "$network_ip" | sed 's/\.[0-9]*$/.2/')"/${cidr}"
+    full_network="${network_ip}/${cidr}"
     
     echo "    -> Создание $vlan_iface_name ($vlan_name)..."
     
@@ -151,7 +162,8 @@ EOF
 # ==============================================================================
 
 echo ""
-read -p "Введите первые два октета сети [192.168]: " BASE_NETWORK_INPUT
+printf "Введите первые два октета сети [192.168]: "
+read -r BASE_NETWORK_INPUT
 BASE_NETWORK=${BASE_NETWORK_INPUT:-192.168}
 
 # Убедимся, что физический интерфейс имеет корректный конфиг
@@ -170,31 +182,39 @@ fi
 # ==============================================================================
 
 echo ""
-read -p "Сколько VLAN нужно создать? [2]: " VLAN_COUNT
+printf "Сколько VLAN нужно создать? [2]: "
+read -r VLAN_COUNT
 VLAN_COUNT=${VLAN_COUNT:-2}
 
-# Массивы для хранения данных
-declare -a VLANS_ID
-declare -a VLANS_NAME
-declare -a VLANS_HOSTS
-declare -a VLANS_OCTET
+# Временные файлы для хранения данных VLAN (вместо массивов)
+VLANS_FILE=$(mktemp)
 
 echo ""
 echo "--------------------------------------------------------"
 echo "  Настройка параметров для $VLAN_COUNT VLAN(s)"
 echo "--------------------------------------------------------"
 
-for (( i=1; i<=VLAN_COUNT; i++ )); do
+i=1
+while [ "$i" -le "$VLAN_COUNT" ]; do
     echo ""
     echo "--- VLAN #$i ---"
     
     # Имя/Описание
-    read -p "Название/Описание (например, Office): " V_NAME
+    printf "Название/Описание (например, Office): "
+    read -r V_NAME
+    [ -z "$V_NAME" ] && V_NAME="VLAN_$i"
     
     # ID VLAN
     while true; do
-        read -p "VLAN ID (число): " V_ID
-        if [[ "$V_ID" =~ ^[0-9]+$ ]] && [ "$V_ID" -ge 1 ] && [ "$V_ID" -le 4094 ]; then
+        printf "VLAN ID (число): "
+        read -r V_ID
+        case "$V_ID" in
+            ''|*[!0-9]*)
+                echo "Ошибка: VLAN ID должен быть числом от 1 до 4094."
+                continue
+                ;;
+        esac
+        if [ "$V_ID" -ge 1 ] && [ "$V_ID" -le 4094 ]; then
             break
         else
             echo "Ошибка: VLAN ID должен быть числом от 1 до 4094."
@@ -202,10 +222,18 @@ for (( i=1; i<=VLAN_COUNT; i++ )); do
     done
 
     # Третий октет подсети
+    default_octet=$((i * 10))
     while true; do
-        read -p "3-й октет подсети (для ${BASE_NETWORK}.X.0) [${i}0]: " V_OCTET
-        V_OCTET=${V_OCTET:-$((i*10))}
-        if [[ "$V_OCTET" =~ ^[0-9]+$ ]] && [ "$V_OCTET" -ge 0 ] && [ "$V_OCTET" -le 255 ]; then
+        printf "3-й октет подсети (для %s.X.0) [%d]: " "$BASE_NETWORK" "$default_octet"
+        read -r V_OCTET
+        V_OCTET=${V_OCTET:-$default_octet}
+        case "$V_OCTET" in
+            ''|*[!0-9]*)
+                echo "Ошибка: Октет должен быть числом от 0 до 255."
+                continue
+                ;;
+        esac
+        if [ "$V_OCTET" -ge 0 ] && [ "$V_OCTET" -le 255 ]; then
             break
         else
             echo "Ошибка: Октет должен быть числом от 0 до 255."
@@ -213,14 +241,14 @@ for (( i=1; i<=VLAN_COUNT; i++ )); do
     done
 
     # Кол-во хостов
-    read -p "Требуемое кол-во хостов [254]: " V_HOSTS
+    printf "Требуемое кол-во хостов [254]: "
+    read -r V_HOSTS
     V_HOSTS=${V_HOSTS:-254}
 
-    # Сохраняем данные
-    VLANS_NAME+=("$V_NAME")
-    VLANS_ID+=("$V_ID")
-    VLANS_OCTET+=("$V_OCTET")
-    VLANS_HOSTS+=("$V_HOSTS")
+    # Сохраняем данные в файл (формат: name|id|octet|hosts)
+    echo "${V_NAME}|${V_ID}|${V_OCTET}|${V_HOSTS}" >> "$VLANS_FILE"
+    
+    i=$((i + 1))
 done
 
 # ==============================================================================
@@ -238,23 +266,32 @@ echo ""
 printf "%-5s %-15s %-10s %-15s %-10s\n" "ID" "Название" "VLAN ID" "Сеть" "Хостов"
 echo "-----------------------------------------------------------"
 
-for (( i=0; i<VLAN_COUNT; i++ )); do
-    cidr=$(calculate_cidr ${VLANS_HOSTS[$i]})
+# Читаем и выводим данные
+i=1
+while IFS='|' read -r v_name v_id v_octet v_hosts; do
+    cidr=$(calculate_cidr "$v_hosts")
     printf "%-5s %-15s %-10s %-15s %-10s\n" \
-        "#$((i+1))" \
-        "${VLANS_NAME[$i]}" \
-        "${VLANS_ID[$i]}" \
-        "${BASE_NETWORK}.${VLANS_OCTET[$i]}.0/${cidr}" \
-        "${VLANS_HOSTS[$i]}"
-done
+        "#$i" \
+        "$v_name" \
+        "$v_id" \
+        "${BASE_NETWORK}.${v_octet}.0/${cidr}" \
+        "$v_hosts"
+    i=$((i + 1))
+done < "$VLANS_FILE"
 
 echo ""
-read -p "Продолжить настройку? (y/n): " CONFIRM
+printf "Продолжить настройку? (y/n): "
+read -r CONFIRM
 
-if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
-    echo "Настройка отменена."
-    exit 0
-fi
+case "$CONFIRM" in
+    [Yy]|[Yy][Ee][Ss])
+        ;;
+    *)
+        echo "Настройка отменена."
+        rm -f "$VLANS_FILE"
+        exit 0
+        ;;
+esac
 
 # ==============================================================================
 # ПРИМЕНЕНИЕ НАСТРОЕК
@@ -264,9 +301,13 @@ echo ""
 echo "Применение настроек..."
 echo "------------------------------------------------"
 
-for (( i=0; i<VLAN_COUNT; i++ )); do
-    create_vlan_config "${VLANS_NAME[$i]}" "${VLANS_ID[$i]}" "$PHYS_IFACE" "${VLANS_OCTET[$i]}" "${VLANS_HOSTS[$i]}" "$BASE_NETWORK"
-done
+# Читаем и применяем
+while IFS='|' read -r v_name v_id v_octet v_hosts; do
+    create_vlan_config "$v_name" "$v_id" "$PHYS_IFACE" "$v_octet" "$v_hosts" "$BASE_NETWORK"
+done < "$VLANS_FILE"
+
+# Удаляем временный файл
+rm -f "$VLANS_FILE"
 
 echo ""
 echo "------------------------------------------------"
@@ -274,22 +315,25 @@ echo "Конфигурация завершена!"
 echo ""
 
 # Перезапуск сети
-read -p "Перезапустить сетевую службу сейчас? (y/n): " RESTART_NET
+printf "Перезапустить сетевую службу сейчас? (y/n): "
+read -r RESTART_NET
 
-if [[ "$RESTART_NET" =~ ^[Yy]$ ]]; then
-    echo "Перезапуск службы сети..."
-    if command -v systemctl &> /dev/null; then
-        systemctl restart network
-    else
-        /etc/init.d/network restart
-    fi
-    
-    if [ $? -eq 0 ]; then
-        echo "✓ Сеть перезагружена успешно."
-    else
-        echo "⚠ Произошла ошибка при перезагрузке."
-    fi
-fi
+case "$RESTART_NET" in
+    [Yy]|[Yy][Ee][Ss])
+        echo "Перезапуск службы сети..."
+        if command -v systemctl > /dev/null 2>&1; then
+            systemctl restart network
+        else
+            /etc/init.d/network restart
+        fi
+        
+        if [ $? -eq 0 ]; then
+            echo "✓ Сеть перезагружена успешно."
+        else
+            echo "⚠ Произошла ошибка при перезагрузке."
+        fi
+        ;;
+esac
 
 # Итоговый вывод
 echo ""
@@ -297,7 +341,7 @@ echo "========================================================"
 echo "  Итоговый список интерфейсов"
 echo "========================================================"
 # Показываем физический интерфейс и созданные VLAN
-ip -brief addr show | grep -E "$PHYS_IFACE|${PHYS_IFACE}\."
+ip -brief addr show 2>/dev/null | grep -E "$PHYS_IFACE|${PHYS_IFACE}\." || ip addr show | grep -E "$PHYS_IFACE|${PHYS_IFACE}\."
 
 echo ""
 echo "Готово!"
