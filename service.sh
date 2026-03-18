@@ -10,7 +10,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Путь к папке со скриптами
-SCRIPTS_DIR="./demo1"
+SCRIPTS_DIR="."
 
 # Функция для отображения заголовка
 show_header() {
