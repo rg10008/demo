@@ -67,9 +67,10 @@ show_menu() {
             "0.1.sudoers.sh") echo -e " ${YELLOW}(Настройка sudoers)${NC}" ;;
             "1.1.ipnet.sh") echo -e " ${YELLOW}(Настройка сети/IP)${NC}" ;;
             "1.2.nat.sh") echo -e " ${YELLOW}(Настройка NAT)${NC}" ;;
-            "1.3.dhcp-install.sh") echo -e " ${YELLOW}(Установка DHCP)${NC}" ;;
-            "1.4.users.sh") echo -e " ${YELLOW}(Управление пользователями)${NC}" ;;
-            "1.5.ssh.sh") echo -e " ${YELLOW}(Настройка SSH)${NC}" ;;
+            "1.3.vlans.sh") echo -e " ${YELLOW}(Установка Vlan)${NC}" ;;
+            "1.4.dhcp-install.sh") echo -e " ${YELLOW}(Установка DHCP)${NC}" ;;
+            "1.5.users.sh") echo -e " ${YELLOW}(Создание пользаков)${NC}" ;;
+            "1.6.ssh.sh") echo -e " ${YELLOW}(Настройка ssh)${NC}" ;;
             "2.2.docker.sh") echo -e " ${YELLOW}(Установка Docker)${NC}" ;;
             "2.3.moodle.sh") echo -e " ${YELLOW}(Установка Moodle)${NC}" ;;
             *) echo -e "" ;;
