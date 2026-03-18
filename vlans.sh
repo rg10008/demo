@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# Скрипт настройки VLAN для ALT Linux (структура /etc/net/ifaces)
+# Скрипт настройки VLAN для ALT Linux (исправленная версия)
 # ==============================================================================
 
 # Проверка прав root
@@ -36,6 +36,7 @@ get_physical_iface() {
 calculate_cidr() {
     local hosts=$1
     local bits=1
+    # Используем цикл while для корректного расчета
     while (( (1 << bits) - 2 < hosts )); do
         ((bits++))
     done
@@ -51,7 +52,8 @@ create_vlan_config() {
     local hosts=$5          # Кол-во хостов
     
     local cidr=$(calculate_cidr $hosts)
-    local vlan_dir="/etc/net/ifaces/${iface}.${vlan_id}"
+    local vlan_iface_name="${iface}.${vlan_id}"
+    local vlan_dir="/etc/net/ifaces/${vlan_iface_name}"
     local network_ip="${BASE_NETWORK}.${network_octet}.0"
     local ip_address="${network_ip%.*}.2/$cidr" # IP сервера (.2)
     local full_network="${network_ip}/${cidr}"
@@ -59,39 +61,37 @@ create_vlan_config() {
     echo ""
     echo ">>> Настройка VLAN $vlan_id ($vlan_name)..."
     
-    # 1. Создаем директорию
+    # 1. Создаем директию
     mkdir -p "$vlan_dir"
     
-    # 2. Создаем/обновляем options
-    if [ ! -f "/etc/net/ifaces/${iface}/options" ]; then
-        mkdir -p "/etc/net/ifaces/${iface}"
-        cat > "/etc/net/ifaces/${iface}/options" <<EOF
+    # 2. Проверяем и создаем конфиг физического интерфейса (если нет)
+    local phys_dir="/etc/net/ifaces/${iface}"
+    if [ ! -d "$phys_dir" ]; then
+        mkdir -p "$phys_dir"
+        cat > "$phys_dir/options" <<EOF
 BOOTPROTO=static
 TYPE=eth
 ONBOOT=yes
 EOF
     fi
     
-    cp "/etc/net/ifaces/${iface}/options" "$vlan_dir/options"
-    
-    # Обновляем параметры для VLAN
-    sed -i "s/^TYPE=.*/TYPE=vlan/" "$vlan_dir/options"
-    sed -i "s/^HOST=.*/HOST=${iface}/" "$vlan_dir/options"
-    
-    # Удаляем старые VID/DISABLED если есть
-    grep -v "^VID=" "$vlan_dir/options" > "$vlan_dir/options.tmp" && mv "$vlan_dir/options.tmp" "$vlan_dir/options"
-    grep -v "^DISABLED=" "$vlan_dir/options" > "$vlan_dir/options.tmp" && mv "$vlan_dir/options.tmp" "$vlan_dir/options"
-    
-    cat >> "$vlan_dir/options" <<EOF
+    # 3. Создаем корректный конфиг для VLAN (options)
+    # ВАЖНО: Пишем файл целиком, чтобы гарантировать наличие HOST, TYPE и VID
+    cat > "$vlan_dir/options" <<EOF
+BOOTPROTO=static
+TYPE=vlan
+ONBOOT=yes
+HOST=${iface}
 VID=${vlan_id}
 DISABLED=no
 CONFIG_IPV4=yes
 EOF
 
-    # 3. Создаем ipv4address
+    # 4. Создаем ipv4address
     echo "$ip_address" > "$vlan_dir/ipv4address"
     
     # Вывод информации
+    echo "    - Интерфейс: $vlan_iface_name"
     echo "    - VLAN ID: $vlan_id"
     echo "    - Сеть: $full_network"
     echo "    - IP интерфейса: $ip_address"
@@ -182,11 +182,18 @@ read -p "Перезапустить сетевую службу сейчас? (y
 
 if [[ "$RESTART_NET" =~ ^[Yy]$ ]]; then
     echo "Перезапуск службы сети..."
-    if systemctl restart network 2>/dev/null; then
+    # Пробуем systemctl, если нет — classic init
+    if command -v systemctl &> /dev/null; then
+        systemctl restart network
+    else
+        /etc/init.d/network restart
+    fi
+    
+    # Проверка статуса
+    if [ $? -eq 0 ]; then
         echo "✓ Сеть перезагружена успешно."
     else
-        echo "⚠ Не удалось перезапустить через systemctl."
-        echo "  Попробуйте вручную: /etc/init.d/network restart"
+        echo "⚠ Произошла ошибка при перезагрузке."
     fi
 fi
 
@@ -195,8 +202,11 @@ echo ""
 echo "========================================================"
 echo "  Итоговая информация"
 echo "========================================================"
-echo "Интерфейсы:"
-ip addr show | grep -E "$PHYS_IFACE|${VLAN1_ID}|${VLAN2_ID}|${VLAN3_ID}" | head -20
+echo "Интерфейсы VLAN:"
+# Выводим только созданные интерфейсы
+ip -brief addr show | grep "${PHYS_IFACE}\." 
+# Или детальный вывод:
+# ip addr show | grep -E "${PHYS_IFACE}\.[0-9]+"
 
 echo ""
 echo "Структура файлов:"
