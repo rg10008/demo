@@ -2,51 +2,39 @@
 
 # Проверка прав root
 if [ "$(id -u)" -ne 0 ]; then
-    echo "Запустите этот скрипт от имени root (sudo)."
+    echo "Этот скрипт должен быть запущен от имени root."
     exit 1
 fi
 
 # ==============================================================================
-# 1. АВТОМАТИЧЕСКИЙ ПОИСК И ВЫБОР ФИЗИЧЕСКОГО ИНТЕРФЕЙСА
+# 1. АВТОМАТИЧЕСКИЙ ВЫБОР ФИЗИЧЕСКОГО ИНТЕРФЕЙСА
 # ==============================================================================
 
-# Функция получения списка физических интерфейсов
-get_physical_ifaces() {
-    local ifaces=()
-    for iface in /sys/class/net/*; do
-        name=$(basename "$iface")
-        
-        # Фильтрация:
-        # 1. Не loopback (lo)
-        # 2. Не VLAN (не содержат точку, например eth0.10)
-        # 3. Физическое устройство (наличие папки device)
-        if [[ "$name" != "lo" && "$name" != *.* && -d "$iface/device" ]]; then
-            ifaces+=("$name")
-        fi
-    done
-    echo "${ifaces[@]}"
-}
+echo "Поиск доступных физических интерфейсов..."
 
-IFACE_LIST=$(get_physical_ifaces)
+# Ищем интерфейсы, исключая lo и виртуальные (содержат точку или являются bridges)
+INTERFACES=()
+for iface in /sys/class/net/*; do
+    name=$(basename "$iface")
+    # Проверяем, что это физическое устройство (есть папка device) и это не loopback
+    if [[ "$name" != "lo" && "$name" != *.* && -d "$iface/device" ]]; then
+        INTERFACES+=("$name")
+    fi
+done
 
-if [ -z "$IFACE_LIST" ]; then
+if [ ${#INTERFACES[@]} -eq 0 ]; then
     echo "Ошибка: Физические интерфейсы не найдены."
     exit 1
 fi
 
-echo "=============================================="
-echo " Настройка физического интерфейса и VLAN"
-echo "=============================================="
-echo "Доступные физические интерфейсы:"
-
-# Меню выбора для пользователя
+# Предлагаем выбор пользователю
 PS3="Выберите номер интерфейса для настройки: "
-select IFACE in $IFACE_LIST; do
+select IFACE in "${INTERFACES[@]}"; do
     if [ -n "$IFACE" ]; then
-        echo "Вы выбрали интерфейс: $IFACE"
+        echo "Выбран интерфейс: $IFACE"
         break
     else
-        echo "Неверный выбор. Пожалуйста, введите номер из списка."
+        echo "Неверный выбор. Попробуйте еще раз."
     fi
 done
 
@@ -54,13 +42,11 @@ done
 # 2. НАСТРОЙКА ФИЗИЧЕСКОГО ИНТЕРФЕЙСА (TYPE=eth)
 # ==============================================================================
 
-CONFIG_DIR="/etc/net/ifaces/$IFACE"
+# Создаем директорию конфигурации
+mkdir -p /etc/net/ifaces/$IFACE
 
-echo "Создание конфигурации для $IFACE..."
-mkdir -p "$CONFIG_DIR"
-
-# Записываем файл options с вашими параметрами
-cat > "$CONFIG_DIR/options" <<EOF
+# Записываем параметры, которые вы передали
+cat > /etc/net/ifaces/$IFACE/options <<EOF
 TYPE=eth
 CONFIG_WIRELESS=no
 BOOTPROTO=static
@@ -72,40 +58,28 @@ SYSTEMD_CONTROLLED=no
 ONBOOT=yes
 EOF
 
-# Если нужна статика, но IP не задан, создаем пустой файл ipv4address, 
-# чтобы система знала, что интерфейс управляется вручную (иначе может быть dhcp)
-touch "$CONFIG_DIR/ipv4address"
+# Создаем пустой файл ipv4address, чтобы система знала, что это статика без IP
+touch /etc/net/ifaces/$IFACE/ipv4address
 
 echo "[OK] Физический интерфейс $IFACE настроен."
 
 # ==============================================================================
-# 3. НАСТРОЙКА VLAN
+# 3. НАСТРОЙКА VLAN (Основная часть скрипта)
 # ==============================================================================
 
-echo ""
-echo "Настройка VLAN интерфейсов."
-read -p "Введите список VLAN ID через пробел (например: 10 20 30): " VLAN_LIST
+# Запрос VLAN ID у пользователя
+read -p "Введите список VLAN ID через пробел (например: 10 20 30): " VLANS
 
-if [ -z "$VLAN_LIST" ]; then
-    echo "VLAN не указаны. Настройка завершена только для физического интерфейса."
-    exit 0
-fi
-
-for VLAN_ID in $VLAN_LIST; do
-    # Проверка на корректность ID
-    if ! [[ "$VLAN_ID" =~ ^[0-9]+$ ]]; then
-        echo "Пропуск некорректного VLAN ID: $VLAN_ID"
-        continue
-    fi
-
-    VLAN_IF="${IFACE}.${VLAN_ID}"
-    VLAN_DIR="/etc/net/ifaces/${VLAN_IF}"
-    
-    echo "Настройка VLAN $VLAN_ID ($VLAN_IF)..."
-    mkdir -p "$VLAN_DIR"
-
-    # Конфигурация VLAN интерфейса
-    cat > "$VLAN_DIR/options" <<EOF
+if [ -z "$VLANS" ]; then
+    echo "VLAN не указаны. Настраиваем только физический интерфейс."
+else
+    for VLAN_ID in $VLANS; do
+        # Формируем имя интерфейса (например eth0.10)
+        VLAN_IF="${IFACE}.${VLAN_ID}"
+        mkdir -p /etc/net/ifaces/${VLAN_IF}
+        
+        # Конфигурация VLAN
+        cat > /etc/net/ifaces/${VLAN_IF}/options <<EOF
 TYPE=vlan
 HOST=$IFACE
 VID=$VLAN_ID
@@ -115,19 +89,20 @@ SYSTEMD_CONTROLLED=no
 ONBOOT=yes
 EOF
 
-    # Спрашиваем IP для VLAN (опционально, можно убрать, если IP не нужны)
-    read -p "Введите IP адрес для VLAN $VLAN_ID (например 192.168.${VLAN_ID}.1/24) или оставьте пустым: " VLAN_IP
-    if [ -n "$VLAN_IP" ]; then
-        echo "$VLAN_IP" > "$VLAN_DIR/ipv4address"
-    fi
-
-    echo "[OK] VLAN $VLAN_ID создан."
-done
+        echo "[OK] VLAN $VLAN_ID создан ($VLAN_IF)."
+    done
+fi
 
 # ==============================================================================
-# 4. ЗАВЕРШЕНИЕ
+# 4. АВТОМАТИЧЕСКОЕ ПОДНЯТИЕ ИНТЕРФЕЙСА
 # ==============================================================================
 
 echo ""
-echo "Настройка сохранена в файлах."
-echo "Для применения изменений выполните: systemctl restart network"
+echo "Применение конфигурации (перезапуск network)..."
+systemctl restart network
+
+if [ $? -eq 0 ]; then
+    echo "Сеть успешно перезапущена. Интерфейсы подняты."
+else
+    echo "Ошибка при перезапуске сети. Проверьте конфигурацию."
+fi
