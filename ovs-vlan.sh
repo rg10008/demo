@@ -5,18 +5,12 @@
 #                  OPEN vSWITCH VLAN CONFIGURATION TOOL                        #
 #                                                                              #
 #  All-in-One скрипт для настройки и управления VLAN в Open vSwitch           #
-#                                                                              #
-#  Возможности:                                                                #
-#  - Интерактивная настройка VLAN                                              #
-#  - Автоматическая установка OVS                                              #
-#  - Миграция IP адресов с роутера                                            #
-#  - Мониторинг и управление                                                   #
-#  - Автовосстановление после перезагрузки                                     #
+#  Поддержка: ALT Linux Server, Ubuntu, Debian, CentOS, Fedora                #
 #                                                                              #
 ################################################################################
 
 # Версия
-VERSION="2.0.0"
+VERSION="2.1.0-alt"
 
 # Цвета для вывода
 RED='\033[0;31m'
@@ -39,6 +33,23 @@ SERVICE_FILE="/etc/systemd/system/ovs-vlan-restore.service"
 INSTALL_DIR="/usr/local/bin"
 SCRIPT_NAME="ovs-vlan.sh"
 
+# Определение дистрибутива
+detect_distro() {
+    if [[ -f /etc/altlinux-release ]]; then
+        echo "alt"
+    elif [[ -f /etc/debian_version ]]; then
+        echo "debian"
+    elif [[ -f /etc/centos-release ]] || [[ -f /etc/redhat-release ]]; then
+        echo "centos"
+    elif [[ -f /etc/fedora-release ]]; then
+        echo "fedora"
+    else
+        echo "unknown"
+    fi
+}
+
+DISTRO=$(detect_distro)
+
 ################################################################################
 #                              ОТОБРАЖЕНИЕ                                     #
 ################################################################################
@@ -58,7 +69,8 @@ print_header() {
 ║                                                                           ║
 ║                    VLAN Configuration Tool                                ║
 LOGO
-    echo -e "║                    Версия ${VERSION} | $(date '+%Y-%m-%d')                              ║"
+    echo -e "║                    Версия ${VERSION}                              ║"
+    echo -e "║                    Дистрибутив: ${DISTRO^^}                           ║"
     echo -e "╚═══════════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 }
@@ -100,7 +112,8 @@ print_step() {
 check_root() {
     if [[ $EUID -ne 0 ]]; then
         print_error "Этот скрипт должен быть запущен с правами root"
-        echo "Используйте: sudo $0 $@"
+        echo "Используйте: su - -c '$0 $@'"
+        echo "Или: sudo $0 $@"
         exit 1
     fi
 }
@@ -113,32 +126,114 @@ check_ovs_installed() {
 }
 
 check_ovs_running() {
-    if systemctl is-active --quiet openvswitch-switch 2>/dev/null || \
+    # ALT Linux использует openvswitch.service
+    if systemctl is-active --quiet openvswitch 2>/dev/null || \
+       systemctl is-active --quiet openvswitch-switch 2>/dev/null || \
        systemctl is-active --quiet ovs-vswitchd 2>/dev/null; then
         return 0
     fi
     return 1
 }
 
-install_ovs() {
-    print_info "Установка Open vSwitch..."
+################################################################################
+#                         УСТАНОВКА OVS                                        #
+################################################################################
+
+install_ovs_alt() {
+    print_info "Установка Open vSwitch для ALT Linux..."
     
-    if command -v apt &> /dev/null; then
-        apt update && apt install -y openvswitch-switch openvswitch-common
-    elif command -v yum &> /dev/null; then
-        yum install -y openvswitch
-        systemctl enable openvswitch
-        systemctl start openvswitch
-    elif command -v dnf &> /dev/null; then
-        dnf install -y openvswitch
-        systemctl enable openvswitch
-        systemctl start openvswitch
+    # Обновляем репозитории
+    apt-get update
+    
+    # Устанавливаем пакеты
+    apt-get install -y openvswitch
+    
+    # Включаем и запускаем сервис
+    systemctl daemon-reload
+    systemctl enable openvswitch 2>/dev/null || systemctl enable ovs-vswitchd 2>/dev/null
+    systemctl start openvswitch 2>/dev/null || systemctl start ovs-vswitchd 2>/dev/null
+    
+    # Проверяем
+    if check_ovs_installed; then
+        print_success "Open vSwitch успешно установлен"
+        return 0
     else
-        print_error "Не удалось определить пакетный менеджер (apt/yum/dnf)"
-        exit 1
+        print_error "Ошибка установки Open vSwitch"
+        return 1
+    fi
+}
+
+install_ovs_debian() {
+    print_info "Установка Open vSwitch для Debian/Ubuntu..."
+    apt-get update && apt-get install -y openvswitch-switch openvswitch-common
+    systemctl enable openvswitch-switch
+    systemctl start openvswitch-switch
+}
+
+install_ovs_centos() {
+    print_info "Установка Open vSwitch для CentOS/RHEL..."
+    yum install -y openvswitch
+    systemctl enable openvswitch
+    systemctl start openvswitch
+}
+
+install_ovs_fedora() {
+    print_info "Установка Open vSwitch для Fedora..."
+    dnf install -y openvswitch
+    systemctl enable openvswitch
+    systemctl start openvswitch
+}
+
+install_ovs() {
+    case "$DISTRO" in
+        alt)
+            install_ovs_alt
+            ;;
+        debian)
+            install_ovs_debian
+            ;;
+        centos)
+            install_ovs_centos
+            ;;
+        fedora)
+            install_ovs_fedora
+            ;;
+        *)
+            print_error "Неизвестный дистрибутив: $DISTRO"
+            print_info "Попробуйте установить Open vSwitch вручную"
+            exit 1
+            ;;
+    esac
+}
+
+start_ovs_service() {
+    local service_name=""
+    
+    # Определяем имя сервиса в зависимости от дистрибутива
+    case "$DISTRO" in
+        alt)
+            service_name="openvswitch"
+            ;;
+        debian)
+            service_name="openvswitch-switch"
+            ;;
+        centos|fedora)
+            service_name="openvswitch"
+            ;;
+        *)
+            service_name="openvswitch"
+            ;;
+    esac
+    
+    # Проверяем и запускаем
+    if systemctl is-active --quiet "$service_name" 2>/dev/null; then
+        return 0
     fi
     
-    print_success "Open vSwitch успешно установлен"
+    systemctl start "$service_name" 2>/dev/null || \
+    systemctl start ovs-vswitchd 2>/dev/null
+    
+    return $?
 }
 
 ensure_ovs_ready() {
@@ -160,10 +255,9 @@ ensure_ovs_ready() {
     
     if ! check_ovs_running; then
         print_warning "Сервис Open vSwitch не запущен, запускаем..."
-        systemctl start openvswitch-switch 2>/dev/null || \
-        systemctl start ovs-vswitchd 2>/dev/null || \
-        {
+        start_ovs_service || {
             print_error "Не удалось запустить Open vSwitch"
+            print_info "Попробуйте запустить вручную: systemctl start openvswitch"
             exit 1
         }
     fi
@@ -351,9 +445,11 @@ save_vlan_config() {
     cat > "$CONFIG_FILE" << EOF
 # Open vSwitch VLAN Configuration
 # Generated: $(date)
+# Distro: $DISTRO
 
 BRIDGE_NAME=$BRIDGE_NAME
 TRUNK_INTERFACE=$trunk
+DISTRO=$DISTRO
 
 EOF
     
@@ -449,6 +545,10 @@ show_vlans_menu() {
 
 do_setup() {
     print_header
+    
+    # Информация о дистрибутиве
+    print_info "Обнаружен дистрибутив: ${DISTRO^^}"
+    echo ""
     
     # Проверки
     print_step "1" "Проверка системы"
@@ -777,6 +877,25 @@ monitor_traffic() {
         read -p "Выберите интерфейс: " interface
     fi
     
+    # Проверяем наличие tcpdump
+    if ! command -v tcpdump &> /dev/null; then
+        print_warning "tcpdump не установлен. Установка..."
+        case "$DISTRO" in
+            alt)
+                apt-get install -y tcpdump
+                ;;
+            debian)
+                apt-get install -y tcpdump
+                ;;
+            centos)
+                yum install -y tcpdump
+                ;;
+            fedora)
+                dnf install -y tcpdump
+                ;;
+        esac
+    fi
+    
     print_info "Мониторинг $interface (Ctrl+C для остановки)..."
     tcpdump -i "$interface" -n -e "not port 22" 2>/dev/null || \
         print_error "Не удалось запустить tcpdump"
@@ -811,8 +930,26 @@ get_script_path() {
     echo "$current_script"
 }
 
+get_ovs_service_name() {
+    case "$DISTRO" in
+        alt)
+            echo "openvswitch.service"
+            ;;
+        debian)
+            echo "openvswitch-switch.service"
+            ;;
+        centos|fedora)
+            echo "openvswitch.service"
+            ;;
+        *)
+            echo "openvswitch.service"
+            ;;
+    esac
+}
+
 do_install_service() {
     local script_path=$(get_script_path)
+    local ovs_service=$(get_ovs_service_name)
     
     # Если скрипт не установлен в систему
     if [[ ! -f "$INSTALL_DIR/$SCRIPT_NAME" ]]; then
@@ -828,8 +965,8 @@ do_install_service() {
     cat > "$SERVICE_FILE" << EOF
 [Unit]
 Description=Open vSwitch VLAN Configuration Restore
-After=network.target openvswitch-switch.service ovs-vswitchd.service
-Requires=openvswitch-switch.service
+After=network.target $ovs_service
+Requires=$ovs_service
 
 [Service]
 Type=oneshot
@@ -868,6 +1005,7 @@ do_restore() {
     }
     
     log "Восстановление конфигурации OVS VLAN..."
+    log "Дистрибутив: $DISTRO"
     
     if [[ ! -f "$CONFIG_FILE" ]]; then
         log "Конфигурация не найдена: $CONFIG_FILE"
@@ -942,9 +1080,9 @@ do_install() {
     print_success "Установлено в $INSTALL_DIR/$SCRIPT_NAME"
     echo ""
     echo -e "${CYAN}Теперь можно запускать:${NC}"
-    echo "  sudo ovs-vlan.sh setup    - настройка VLAN"
-    echo "  sudo ovs-vlan.sh status   - статус"
-    echo "  sudo ovs-vlan.sh help     - справка"
+    echo "  su - -c 'ovs-vlan.sh setup'    - настройка VLAN"
+    echo "  su - -c 'ovs-vlan.sh status'   - статус"
+    echo "  su - -c 'ovs-vlan.sh help'     - справка"
     
     echo ""
     echo -e "${YELLOW}Установить сервис автозагрузки?${NC}"
@@ -1000,16 +1138,22 @@ ${BOLD}СИСТЕМНЫЕ КОМАНДЫ:${NC}
 
 ${BOLD}ПРИМЕРЫ:${NC}
     # Интерактивная настройка
-    sudo $0 setup
+    su - -c '$0 setup'
 
     # Добавить VLAN 100 на порт eth1
-    sudo $0 add-vlan 100 eth1
+    su - -c '$0 add-vlan 100 eth1'
 
     # Показать статус
-    sudo $0 status
+    $0 status
 
     # Мониторинг трафика
-    sudo $0 monitor eth1
+    su - -c '$0 monitor eth1'
+
+${BOLD}ПОДДЕРЖИВАЕМЫЕ ДИСТРИБУТИВЫ:${NC}
+    • ALT Linux Server (apt-get)
+    • Ubuntu/Debian (apt-get)
+    • CentOS/RHEL (yum)
+    • Fedora (dnf)
 
 ${BOLD}ФАЙЛЫ:${NC}
     $CONFIG_FILE    Конфигурация VLAN
@@ -1017,9 +1161,12 @@ ${BOLD}ФАЙЛЫ:${NC}
     $LOG_FILE       Лог восстановления
     $SERVICE_FILE   Systemd unit
 
-${BOLD}БЫСТРЫЙ СТАРТ:${NC}
-    sudo $0 install     # Установить в систему
-    sudo ovs-vlan.sh    # Запустить настройку
+${BOLD}БЫСТРЫЙ СТАРТ НА ALT LINUX:${NC}
+    # Установка
+    su - -c '$0 install'
+    
+    # Настройка
+    ovs-vlan.sh
 
 EOF
 }
