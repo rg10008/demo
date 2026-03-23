@@ -2,7 +2,7 @@
 
 echo "Установка DHCP сервера..."
 apt-get update -y
-apt-get install -y isc-dhcp-server ipcalc
+apt-get install -y dhcp-server ipcalc
 
 echo ""
 echo "Автонастройка DHCP сервера"
@@ -12,7 +12,7 @@ echo ""
 INTERFACES=()
 IPS=()
 
-# Получение интерфейсов (FIXED)
+# Получение интерфейсов (FIX VLAN FIX)
 get_interfaces() {
     echo "Доступные сетевые интерфейсы:"
     echo "------------------------------"
@@ -66,7 +66,7 @@ select_interface() {
     done
 }
 
-# Получение сети
+# Получение параметров сети
 get_network_info() {
     local iface=$1
 
@@ -142,23 +142,23 @@ subnet ${NET2[0]} netmask ${NET2[1]} {
 }
 EOF
 
-# Интерфейсы DHCP
-echo "Настройка интерфейсов..."
+# Интерфейсы DHCP (ALT Linux стиль)
+echo "Настройка /etc/sysconfig/dhcpd..."
 
-cat > /etc/default/isc-dhcp-server <<EOF
-INTERFACESv4="$IFACE1 $IFACE2"
+cat > /etc/sysconfig/dhcpd <<EOF
+DHCPDARGS="$IFACE1 $IFACE2"
 EOF
 
-# Включение IP forwarding
-echo "Включение маршрутизации..."
-echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+# Включение маршрутизации
+echo "Включение IP forwarding..."
+grep -q "net.ipv4.ip_forward=1" /etc/sysctl.conf || echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
 sysctl -p
 
 # Перезапуск
 echo "Перезапуск DHCP..."
-systemctl enable isc-dhcp-server
-systemctl restart isc-dhcp-server
+systemctl enable dhcpd
+systemctl restart dhcpd
 
 echo ""
 echo "Готово!"
-systemctl status isc-dhcp-server --no-pager
+systemctl status dhcpd --no-pager
