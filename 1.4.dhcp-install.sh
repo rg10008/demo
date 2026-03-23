@@ -1,192 +1,164 @@
 #!/bin/bash
 
 echo "Установка DHCP сервера..."
-apt-get update
-apt-get install -y dhcp-server ipcalc
+apt-get update -y
+apt-get install -y isc-dhcp-server ipcalc
 
 echo ""
 echo "Автонастройка DHCP сервера"
 echo "=========================="
 echo ""
 
-# Функция получения списка активных интерфейсов с IP
+INTERFACES=()
+IPS=()
+
+# Получение интерфейсов (FIXED)
 get_interfaces() {
     echo "Доступные сетевые интерфейсы:"
     echo "------------------------------"
-    
-    INTERFACES=()
-    IPS=()
+
     INDEX=1
-    
-    # Получаем все интерфейсы с IPv4 адресами, исключая lo
-    for iface in $(ip -4 addr show | grep -E '^[0-9]+:' | awk '{print $2}' | tr -d ':' | grep -v '^lo$'); do
-        IP=$(ip -4 addr show "$iface" | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
+
+    for iface in $(ip -4 -o addr show | awk '{print $2}' | cut -d@ -f1 | sort -u); do
+        [ "$iface" = "lo" ] && continue
+
+        IP=$(ip -4 -o addr show "$iface" | awk '{print $4}' | cut -d/ -f1)
         STATUS=$(ip link show "$iface" | grep -oP '(?<=state\s)\w+')
-        
+
         if [ -n "$IP" ]; then
             INTERFACES+=("$iface")
             IPS+=("$IP")
-            printf "%2d) %-15s %s (IP: %s)\n" "$INDEX" "$iface" "[$STATUS]" "$IP"
+
+            printf "%2d) %-15s [%s] (IP: %s)\n" "$INDEX" "$iface" "$STATUS" "$IP"
             ((INDEX++))
         fi
     done
-    
+
     echo ""
 }
 
-# Функция выбора интерфейса
+# Выбор интерфейса
 select_interface() {
     local prompt="$1"
     local selected_index
-    
+
     while true; do
         read -p "$prompt" selection
-        
-        # Проверка на числовой ввод (выбор по номеру)
+
         if [[ "$selection" =~ ^[0-9]+$ ]]; then
             if [ "$selection" -ge 1 ] && [ "$selection" -le ${#INTERFACES[@]} ]; then
                 selected_index=$((selection - 1))
-                echo "Выбран интерфейс: ${INTERFACES[$selected_index]} (${IPS[$selected_index]})"
-                echo ""
                 SELECTED_IFACE="${INTERFACES[$selected_index]}"
+                echo "Выбран: $SELECTED_IFACE (${IPS[$selected_index]})"
+                echo ""
                 return 0
             else
                 echo "Ошибка: введите число от 1 до ${#INTERFACES[@]}"
             fi
-        # Проверка на ввод имени интерфейса
         elif [[ " ${INTERFACES[*]} " =~ " ${selection} " ]]; then
-            for i in "${!INTERFACES[@]}"; do
-                if [ "${INTERFACES[$i]}" == "$selection" ]; then
-                    echo "Выбран интерфейс: ${INTERFACES[$i]} (${IPS[$i]})"
-                    echo ""
-                    SELECTED_IFACE="${INTERFACES[$i]}"
-                    return 0
-                fi
-            done
+            SELECTED_IFACE="$selection"
+            echo "Выбран: $SELECTED_IFACE"
+            echo ""
+            return 0
         else
-            echo "Ошибка: интерфейс '$selection' не найден. Введите номер или имя интерфейса."
+            echo "Ошибка: неверный ввод"
         fi
     done
 }
 
-# Получаем и показываем интерфейсы
-get_interfaces
-
-# Проверка количества интерфейсов
-if [ ${#INTERFACES[@]} -lt 2 ]; then
-    echo "Ошибка: найдено менее 2 интерфейсов с IP-адресами."
-    echo "Для работы DHCP сервера необходимо минимум 2 интерфейса."
-    exit 1
-fi
-
-# Выбор интерфейсов
-SELECTED_IFACE=""
-select_interface "Выберите первый интерфейс (номер или имя): "
-IFACE1="$SELECTED_IFACE"
-
-select_interface "Выберите второй интерфейс (номер или имя): "
-IFACE2="$SELECTED_IFACE"
-
-# Проверка на одинаковые интерфейсы
-if [ "$IFACE1" == "$IFACE2" ]; then
-    echo "Ошибка: выбраны одинаковые интерфейсы. Выберите разные интерфейсы."
-    exit 1
-fi
-
-echo "Будут использованы интерфейсы: $IFACE1 и $IFACE2"
-echo ""
-
-# Функция получения информации о сети
+# Получение сети
 get_network_info() {
-    IP=$(ip -4 addr show $1 | grep -oP '(?<=inet\s)\d+(\.\d+){3}/\d+')
-    
-    if [ -z "$IP" ]; then
-        echo "На интерфейсе $1 нет IP"
-        exit 1
-    fi
+    local iface=$1
 
-    NETWORK=$(ipcalc $IP | grep Network | awk '{print $2}' | cut -d/ -f1)
-    NETMASK=$(ipcalc $IP | grep Netmask | awk '{print $2}')
-    BROADCAST=$(ipcalc $IP | grep Broadcast | awk '{print $2}')
+    CIDR=$(ip -4 -o addr show "$iface" | awk '{print $4}')
+    IP=$(echo "$CIDR" | cut -d/ -f1)
+
+    NETWORK=$(ipcalc "$CIDR" | grep Network | awk '{print $2}' | cut -d/ -f1)
+    NETMASK=$(ipcalc "$CIDR" | grep Netmask | awk '{print $2}')
+    BROADCAST=$(ipcalc "$CIDR" | grep Broadcast | awk '{print $2}')
 
     START=$(echo $NETWORK | awk -F. '{print $1"."$2"."$3"."$4+10}')
     END=$(echo $BROADCAST | awk -F. '{print $1"."$2"."$3"."$4-1}')
-    ROUTER=$(echo $IP | cut -d/ -f1)
 
-    echo "$NETWORK $NETMASK $BROADCAST $START $END $ROUTER"
+    echo "$NETWORK $NETMASK $BROADCAST $START $END $IP"
 }
+
+# --- Запуск ---
+get_interfaces
+
+if [ ${#INTERFACES[@]} -lt 2 ]; then
+    echo "Ошибка: нужно минимум 2 интерфейса с IP"
+    exit 1
+fi
+
+select_interface "Выбери первый интерфейс: "
+IFACE1="$SELECTED_IFACE"
+
+select_interface "Выбери второй интерфейс: "
+IFACE2="$SELECTED_IFACE"
+
+if [ "$IFACE1" == "$IFACE2" ]; then
+    echo "Ошибка: интерфейсы должны быть разные"
+    exit 1
+fi
+
+echo "Используем: $IFACE1 и $IFACE2"
+echo ""
 
 echo "Определение параметров сети..."
 
-NET1_INFO=($(get_network_info $IFACE1))
-NET2_INFO=($(get_network_info $IFACE2))
+NET1=($(get_network_info $IFACE1))
+NET2=($(get_network_info $IFACE2))
 
-# Вывод информации о сетях
 echo ""
-echo "Параметры сети для $IFACE1:"
-echo "  Сеть: ${NET1_INFO[0]}, Маска: ${NET1_INFO[1]}"
-echo "  Диапазон DHCP: ${NET1_INFO[3]} - ${NET1_INFO[4]}"
-echo "  Шлюз: ${NET1_INFO[5]}"
-echo ""
-echo "Параметры сети для $IFACE2:"
-echo "  Сеть: ${NET2_INFO[0]}, Маска: ${NET2_INFO[1]}"
-echo "  Диапазон DHCP: ${NET2_INFO[3]} - ${NET2_INFO[4]}"
-echo "  Шлюз: ${NET2_INFO[5]}"
+echo "$IFACE1 -> ${NET1[0]} / ${NET1[1]}"
+echo "DHCP: ${NET1[3]} - ${NET1[4]}"
 echo ""
 
-echo "Создание конфигурации DHCP..."
+echo "$IFACE2 -> ${NET2[0]} / ${NET2[1]}"
+echo "DHCP: ${NET2[3]} - ${NET2[4]}"
+echo ""
 
-# Проверка и очистка существующего конфига
-if [ -f /etc/dhcp/dhcpd.conf ]; then
-    echo "Найден существующий конфиг /etc/dhcp/dhcpd.conf - очищаем..."
-    > /etc/dhcp/dhcpd.conf
-fi
+# Конфиг DHCP
+echo "Создание /etc/dhcp/dhcpd.conf..."
 
 cat > /etc/dhcp/dhcpd.conf <<EOF
-# DHCP конфигурация
-# Автоматически сгенерировано: $(date)
-# Интерфейсы: $IFACE1, $IFACE2
-
 default-lease-time 600;
 max-lease-time 7200;
 authoritative;
 
-# Подсеть для $IFACE1
-subnet ${NET1_INFO[0]} netmask ${NET1_INFO[1]} {
-  range ${NET1_INFO[3]} ${NET1_INFO[4]};
-  option routers ${NET1_INFO[5]};
-  option broadcast-address ${NET1_INFO[2]};
+subnet ${NET1[0]} netmask ${NET1[1]} {
+  range ${NET1[3]} ${NET1[4]};
+  option routers ${NET1[5]};
+  option broadcast-address ${NET1[2]};
   option domain-name-servers 8.8.8.8, 8.8.4.4;
 }
 
-# Подсеть для $IFACE2
-subnet ${NET2_INFO[0]} netmask ${NET2_INFO[1]} {
-  range ${NET2_INFO[3]} ${NET2_INFO[4]};
-  option routers ${NET2_INFO[5]};
-  option broadcast-address ${NET2_INFO[2]};
+subnet ${NET2[0]} netmask ${NET2[1]} {
+  range ${NET2[3]} ${NET2[4]};
+  option routers ${NET2[5]};
+  option broadcast-address ${NET2[2]};
   option domain-name-servers 8.8.8.8, 8.8.4.4;
 }
 EOF
 
-echo "Настройка интерфейсов DHCP..."
+# Интерфейсы DHCP
+echo "Настройка интерфейсов..."
 
-# Проверка и очистка конфига интерфейсов
-if [ -f /etc/sysconfig/dhcpd ]; then
-    echo "Найден существующий конфиг /etc/sysconfig/dhcpd - очищаем..."
-    > /etc/sysconfig/dhcpd
-fi
-
-cat > /etc/sysconfig/dhcpd <<EOF
-# Интерфейсы для DHCP сервера
-DHCPDARGS="$IFACE1 $IFACE2"
+cat > /etc/default/isc-dhcp-server <<EOF
+INTERFACESv4="$IFACE1 $IFACE2"
 EOF
 
+# Включение IP forwarding
+echo "Включение маршрутизации..."
+echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+sysctl -p
+
+# Перезапуск
 echo "Перезапуск DHCP..."
-
-systemctl enable dhcpd
-systemctl restart dhcpd
+systemctl enable isc-dhcp-server
+systemctl restart isc-dhcp-server
 
 echo ""
-echo "DHCP сервер настроен!"
-echo "====================="
-systemctl status dhcpd --no-pager
+echo "Готово!"
+systemctl status isc-dhcp-server --no-pager
