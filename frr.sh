@@ -49,7 +49,7 @@ print_warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 
 clear
 echo -e "${CYAN}╔══════════════════════════════════════════════════════════╗"
-echo "║         FRR OSPF/GRE Setup (Final Stable Version)        ║"
+echo "║         FRR OSPF/GRE Setup                               ║"
 echo "╚══════════════════════════════════════════════════════════╝${NC}"
 
 # Установка
